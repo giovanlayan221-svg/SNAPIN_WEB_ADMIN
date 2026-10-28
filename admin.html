@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Snapin Admin</title>
+<style>
+  :root{ --bg:#fff7f2; --ink:#3b2447; --pink:#f76a9e; --line:#ecdde6; --muted:#7a6a80; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  main{ max-width:640px; margin:0 auto; padding:20px 16px 80px; }
+  h1{ font-size:22px; margin:6px 0 4px; }
+  h2{ font-size:16px; margin:0 0 12px; }
+  .muted{ color:var(--muted); font-size:13px; line-height:1.5; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:20px; padding:16px; margin:14px 0; }
+  label{ display:block; font-size:13px; font-weight:600; margin:10px 0 6px; }
+  input[type=text], input[type=password], input[type=file]{ width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; font-size:15px; background:#fff; }
+  button{ font:inherit; font-weight:600; border:0; border-radius:100px; padding:12px 20px; cursor:pointer; }
+  .btn{ background:var(--ink); color:#fff; }
+  .btn.pink{ background:var(--pink); }
+  .btn.ghost{ background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+  .row{ display:flex; gap:10px; align-items:center; }
+  .row > *{ flex:1; }
+  .msg{ font-size:13px; margin-top:10px; line-height:1.5; }
+  .msg.err{ color:#c0264b; } .msg.ok{ color:#17803d; }
+  #preview-wrap{ margin-top:14px; text-align:center; }
+  #preview{ max-width:100%; border:1px solid var(--line); border-radius:12px; }
+  .item{ display:flex; gap:12px; align-items:center; padding:12px 0; border-top:1px solid var(--line); }
+  .item:first-of-type{ border-top:0; }
+  .item img{ width:56px; height:84px; object-fit:contain; background:#f4eef2; border-radius:10px; flex:none; }
+  .item .meta{ flex:1; min-width:0; }
+  .item .name{ font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item button{ padding:8px 14px; font-size:13px; flex:none; }
+  .del{ background:#fde8ee; color:#c0264b; }
+  #toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; padding:10px 18px; border-radius:100px; font-size:14px; opacity:0; transition:.25s; pointer-events:none; max-width:90%; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .server{ word-break:break-all; font-weight:700; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Snapin Admin</h1>
+  <p class="muted">Kelola bingkai untuk semua pengguna aplikasi Snapin.</p>
+
+  <section class="card" id="login-card">
+    <h2>Masuk</h2>
+    <label for="pw">Password admin</label>
+    <input type="password" id="pw" autocomplete="current-password" placeholder="Password">
+    <div style="margin-top:14px"><button class="btn" id="btn-login">Masuk</button></div>
+    <div class="msg err" id="login-msg"></div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <h2>Tambah bingkai</h2>
+      <p class="muted">Upload PNG atau WebP dari Canva. Lubang foto dikenali otomatis: bagian transparan, atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya.</p>
+      <label for="file">File bingkai</label>
+      <input type="file" id="file" accept="image/png,image/webp">
+      <label for="label">Nama bingkai</label>
+      <input type="text" id="label" maxlength="60" placeholder="Contoh: Pink Strip 4 Foto">
+      <div id="preview-wrap" hidden><canvas id="preview"></canvas></div>
+      <div class="msg" id="analyze-msg"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn pink" id="btn-save" disabled>Simpan bingkai</button>
+      </div>
+      <div class="msg" id="save-msg"></div>
+    </section>
+
+    <section class="card">
+      <h2>Bingkai tersimpan</h2>
+      <div id="list"><p class="muted">Memuat...</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Alamat server untuk aplikasi</h2>
+      <p class="muted">Di aplikasi Snapin, ketuk tulisan "Photobooth digital" 7 kali, lalu isi alamat ini.</p>
+      <p class="server" id="origin"></p>
+      <button class="btn ghost" id="btn-logout" style="margin-top:8px">Keluar</button>
+    </section>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+/* FRAMEDETECT:BEGIN */
+const FrameDetect = (function(){
+  // Warna kunci yang dikenali kalau PNG tidak transparan: magenta, hijau, cyan, kuning
+  const KEYS = [[255,0,255],[0,255,0],[0,255,255],[255,255,0]];
+  const KEY_NEAR = 90;      // jarak warna untuk menandai "lubang" saat mendeteksi
+  const KEY_T0 = 60, KEY_T1 = 120; // jarak warna: <=T0 transparan penuh, T0..T1 transparan sebagian
+  const MIN_AREA = 0.008;   // lubang minimal 0.8% dari luas gambar
+  const MAX_HOLES = 6;
+
+  function d2(r,g,b,k){ const dr=r-k[0], dg=g-k[1], db=b-k[2]; return dr*dr+dg*dg+db*db; }
+
+  function isHole(data, i, mode, key){
+    if (mode === 'alpha') return data[i+3] < 40;
+    return data[i+3] > 200 && d2(data[i], data[i+1], data[i+2], key) < KEY_NEAR*KEY_NEAR;
+  }
+
+  function buildMask(data, w, h, step, mode, key){
+    const mw = Math.ceil(w/step), mh = Math.ceil(h/step);
+    const mask = new Uint8Array(mw*mh);
+    for (let my=0; my<mh; my++){
+      const y = Math.min(h-1, my*step + (step>>1));
+      for (let mx=0; mx<mw; mx++){
+        const x = Math.min(w-1, mx*step + (step>>1));
+        mask[my*mw+mx] = isHole(data, (y*w+x)*4, mode, key) ? 1 : 0;
+      }
+    }
+    return { mask, mw, mh };
+  }
+
+  function components(mask, mw, mh){
+    const seen = new Uint8Array(mw*mh);
+    const stack = new Int32Array(mw*mh);
+    const comps = [];
+    for (let s=0; s<mw*mh; s++){
+      if (!mask[s] || seen[s]) continue;
+      let sp = 0; stack[sp++] = s; seen[s] = 1;
+      let area=0, minx=mw, maxx=-1, miny=mh, maxy=-1, border=false;
+      while (sp){
+        const p = stack[--sp];
+        const x = p % mw, y = (p / mw) | 0;
+        area++;
+        if (x<minx) minx=x; if (x>maxx) maxx=x; if (y<miny) miny=y; if (y>maxy) maxy=y;
+        if (x===0 || y===0 || x===mw-1 || y===mh-1) border = true;
+        if (x>0      && mask[p-1]  && !seen[p-1])  { seen[p-1]=1;  stack[sp++]=p-1; }
+        if (x<mw-1   && mask[p+1]  && !seen[p+1])  { seen[p+1]=1;  stack[sp++]=p+1; }
+        if (y>0      && mask[p-mw] && !seen[p-mw]) { seen[p-mw]=1; stack[sp++]=p-mw; }
+        if (y<mh-1   && mask[p+mw] && !seen[p+mw]) { seen[p+mw]=1; stack[sp++]=p+mw; }
+      }
+      comps.push({ area, minx, maxx, miny, maxy, border });
+    }
+    return comps;
+  }
+
+  // urutan baca: atas ke bawah, kiri ke kanan
+  function readingOrder(areas){
+    const sorted = areas.slice().sort((a,b)=> (a.y+a.height/2) - (b.y+b.height/2));
+    const rows = [];
+    sorted.forEach(a=>{
+      const cy = a.y + a.height/2;
+      let row = null;
+      for (let i=0; i<rows.length; i++){
+        if (Math.abs(rows[i].cy - cy) < Math.min(rows[i].minH, a.height) * 0.5){ row = rows[i]; break; }
+      }
+      if (!row){ row = { cy, minH:a.height, items:[] }; rows.push(row); }
+      row.items.push(a);
+      row.cy = (row.cy*(row.items.length-1) + cy) / row.items.length;
+      row.minH = Math.min(row.minH, a.height);
+    });
+    rows.sort((a,b)=>a.cy-b.cy);
+    const out = [];
+    rows.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); r.items.forEach(a=>out.push(a)); });
+    return out;
+  }
+
+  function tryMode(data, w, h, step, mode, key){
+    const { mask, mw, mh } = buildMask(data, w, h, step, mode, key);
+    const total = mw*mh;
+    let comps = components(mask, mw, mh).filter(c=>{
+      if (c.area < total*MIN_AREA) return false;
+      if (mode === 'alpha' && c.border) return false;   // area transparan di tepi = bagian desain, bukan lubang
+      const bw = c.maxx-c.minx+1, bh = c.maxy-c.miny+1;
+      if (c.area / (bw*bh) < 0.3) return false;
+      return true;
+    });
+    let tooMany = false;
+    if (comps.length > MAX_HOLES){
+      const maxA = Math.max.apply(null, comps.map(c=>c.area));
+      comps = comps.filter(c=>c.area >= maxA*0.4);
+      if (comps.length > MAX_HOLES){ tooMany = true; comps = []; }
+    }
+    const pad = Math.round(Math.min(w,h)*0.006) + 2;
+    const areas = comps.map(c=>{
+      // sempurnakan batas di resolusi penuh
+      const x0 = Math.max(0, c.minx*step - step*2), x1 = Math.min(w-1, (c.maxx+1)*step + step*2);
+      const y0 = Math.max(0, c.miny*step - step*2), y1 = Math.min(h-1, (c.maxy+1)*step + step*2);
+      let minX=w, maxX=-1, minY=h, maxY=-1;
+      for (let y=y0; y<=y1; y++){
+        for (let x=x0; x<=x1; x++){
+          if (isHole(data, (y*w+x)*4, mode, key)){
+            if (x<minX) minX=x; if (x>maxX) maxX=x; if (y<minY) minY=y; if (y>maxY) maxY=y;
+          }
+        }
+      }
+      if (maxX < 0){ minX = c.minx*step; maxX = (c.maxx+1)*step; minY = c.miny*step; maxY = (c.maxy+1)*step; }
+      const x = Math.max(0, minX - pad), y = Math.max(0, minY - pad);
+      const x2 = Math.min(w, maxX + 1 + pad), y2 = Math.min(h, maxY + 1 + pad);
+      return { x, y, width: x2-x, height: y2-y };
+    });
+    return { mode, key, areas: readingOrder(areas), tooMany };
+  }
+
+  function analyze(data, w, h){
+    const step = Math.max(1, Math.floor(Math.sqrt((w*h)/200000)));
+    // 1) lubang transparan
+    const a = tryMode(data, w, h, step, 'alpha', null);
+    if (a.areas.length) return a;
+    // 2) lubang berwarna polos (hijau / magenta / dst) kalau PNG tidak transparan
+    let bestKey = null, bestCount = 0, samples = 0;
+    const counts = KEYS.map(()=>0);
+    for (let y=Math.floor(step/2); y<h; y+=step){
+      for (let x=Math.floor(step/2); x<w; x+=step){
+        const i = (y*w+x)*4;
+        samples++;
+        if (data[i+3] <= 200) continue;
+        for (let k=0; k<KEYS.length; k++){
+          if (d2(data[i], data[i+1], data[i+2], KEYS[k]) < KEY_NEAR*KEY_NEAR) counts[k]++;
+        }
+      }
+    }
+    for (let k=0; k<KEYS.length; k++){ if (counts[k] > bestCount){ bestCount = counts[k]; bestKey = KEYS[k]; } }
+    if (bestKey && bestCount >= samples*0.015){
+      const kres = tryMode(data, w, h, step, 'key', bestKey);
+      if (kres.areas.length || kres.tooMany) return kres;
+    }
+    return { mode:'none', key:null, areas:[], tooMany: a.tooMany };
+  }
+
+  // Ubah warna kunci jadi transparan (halus di tepi)
+  function applyKey(data, w, h, key){
+    const n = w*h;
+    for (let p=0; p<n; p++){
+      const i = p*4;
+      const d = Math.sqrt(d2(data[i], data[i+1], data[i+2], key));
+      if (d <= KEY_T0){ data[i+3] = 0; }
+      else if (d < KEY_T1){ data[i+3] = Math.round(data[i+3] * (d-KEY_T0) / (KEY_T1-KEY_T0)); }
+    }
+  }
+
+  function loadImage(src){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  // Dipakai saat upload bingkai: perkecil, deteksi lubang, kunci warna -> transparan, simpan
+  async function process(src, maxSideArg){
+    const img = await loadImage(src);
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const maxSide = maxSideArg || 2400;
+    const s = Math.min(1, maxSide/Math.max(w,h), Math.sqrt(6000000/(w*h)));
+    w = Math.max(1, Math.round(w*s)); h = Math.max(1, Math.round(h*s));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently:true });
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(img, 0, 0, w, h);
+    let res = { mode:'none', areas:[], tooMany:false };
+    try{
+      const id = ctx.getImageData(0, 0, w, h);
+      res = analyze(id.data, w, h);
+      if (res.areas.length && res.mode === 'key'){
+        applyKey(id.data, w, h, res.key);
+        ctx.putImageData(id, 0, 0);
+      }
+    }catch(e){ /* tidak bisa baca piksel: pakai sebagai bingkai tempel biasa */ }
+    let dataURL;
+    try{ dataURL = c.toDataURL('image/webp', 0.92); }catch(e){ dataURL = null; }
+    if (!dataURL || dataURL.indexOf('data:image/webp') !== 0) dataURL = c.toDataURL('image/png');
+    return { dataURL, width:w, height:h, areas: res.areas.length ? res.areas : null, mode: res.mode, tooMany: !!res.tooMany };
+  }
+
+  return { analyze, applyKey, process };
+})();
+/* FRAMEDETECT:END */
+
+(function(){
+  const $ = (s)=>document.querySelector(s);
+  let PW = '';
+  try{ PW = localStorage.getItem('snapin_admin_pw') || ''; }catch(e){}
+  let current = null;   // hasil analisis bingkai yang belum disimpan
+
+  function toast(msg){
+    const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 2800);
+  }
+  function setMsg(el, text, cls){ el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  async function api(action, method, body){
+    const headers = { 'x-admin-password': PW };
+    if (body) headers['Content-Type'] = 'application/json';
+    const r = await fetch('/api/admin?action=' + action, { method: method || 'GET', headers, body: body ? JSON.stringify(body) : undefined });
+    let data = null; try{ data = await r.json(); }catch(e){}
+    if (!r.ok){
+      const err = new Error((data && data.error) || ('Gagal (' + r.status + ')'));
+      err.status = r.status; throw err;
+    }
+    return data;
+  }
+
+  function fileToDataURL(file){
+    return new Promise((resolve, reject)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(file);
+    });
+  }
+  function loadImage(src){
+    return new Promise((resolve, reject)=>{
+      const i = new Image(); i.onload = ()=>resolve(i); i.onerror = reject; i.src = src;
+    });
+  }
+  function dataBytes(u){ return Math.floor((u.length - u.indexOf(',') - 1) * 3 / 4); }
+
+  async function showApp(){
+    $('#login-card').hidden = true;
+    $('#app').hidden = false;
+    $('#origin').textContent = location.origin;
+    await refreshList();
+  }
+
+  async function login(){
+    PW = $('#pw').value.trim();
+    setMsg($('#login-msg'), '');
+    if (!PW){ setMsg($('#login-msg'), 'Isi password dulu', 'err'); return; }
+    try{
+      await api('list');
+      try{ localStorage.setItem('snapin_admin_pw', PW); }catch(e){}
+      await showApp();
+    }catch(e){
+      setMsg($('#login-msg'), e.status === 401 ? 'Password salah' : e.message, 'err');
+    }
+  }
+
+  function logout(){
+    try{ localStorage.removeItem('snapin_admin_pw'); }catch(e){}
+    location.reload();
+  }
+
+  async function refreshList(){
+    const box = $('#list');
+    try{
+      const data = await api('list');
+      const frames = data.frames || [];
+      if (!frames.length){ box.innerHTML = '<p class="muted">Belum ada bingkai.</p>'; return; }
+      box.innerHTML = '';
+      frames.forEach(f=>{
+        const row = document.createElement('div');
+        row.className = 'item';
+        const img = document.createElement('img');
+        img.src = '/api/img?id=' + encodeURIComponent(f.id);
+        img.alt = '';
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const name = document.createElement('div');
+        name.className = 'name'; name.textContent = f.label;
+        const sub = document.createElement('div');
+        sub.className = 'muted'; sub.textContent = f.photoCount + ' foto - ' + f.canvasWidth + ' x ' + f.canvasHeight;
+        meta.appendChild(name); meta.appendChild(sub);
+        const del = document.createElement('button');
+        del.className = 'del'; del.textContent = 'Hapus';
+        del.addEventListener('click', async ()=>{
+          if (!confirm('Hapus bingkai "' + f.label + '"?')) return;
+          del.disabled = true;
+          try{ await api('delete', 'POST', { id: f.id }); toast('Bingkai dihapus'); await refreshList(); }
+          catch(e){ toast(e.message); del.disabled = false; }
+        });
+        row.appendChild(img); row.appendChild(meta); row.appendChild(del);
+        box.appendChild(row);
+      });
+    }catch(e){
+      if (e.status === 401){ logout(); return; }
+      box.innerHTML = '<p class="msg err">' + e.message + '</p>';
+    }
+  }
+
+  async function drawPreview(res){
+    const img = await loadImage(res.dataURL);
+    const c = $('#preview');
+    const wrap = $('#preview-wrap');
+    wrap.hidden = false;
+    const maxW = Math.min(360, wrap.clientWidth - 8 || 320);
+    const scale = Math.min(maxW / res.width, 560 / res.height);
+    c.width = Math.max(1, Math.round(res.width * scale));
+    c.height = Math.max(1, Math.round(res.height * scale));
+    const ctx = c.getContext('2d');
+    const sq = 12;
+    for (let y = 0; y < c.height; y += sq){
+      for (let x = 0; x < c.width; x += sq){
+        ctx.fillStyle = ((x / sq + y / sq) % 2 === 0) ? '#e9e2e7' : '#f7f3f6';
+        ctx.fillRect(x, y, sq, sq);
+      }
+    }
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    ctx.lineWidth = 2; ctx.strokeStyle = '#e11d48'; ctx.fillStyle = '#e11d48';
+    ctx.font = 'bold 16px sans-serif';
+    (res.areas || []).forEach((a, i)=>{
+      ctx.strokeRect(a.x * scale, a.y * scale, a.width * scale, a.height * scale);
+      ctx.fillText(String(i + 1), a.x * scale + 8, a.y * scale + 22);
+    });
+  }
+
+  async function onFile(){
+    const f = $('#file').files[0];
+    current = null;
+    $('#btn-save').disabled = true;
+    setMsg($('#save-msg'), '');
+    if (!f) return;
+    setMsg($('#analyze-msg'), 'Memproses...');
+    try{
+      const raw = await fileToDataURL(f);
+      const res = await FrameDetect.process(raw, 2000);
+      await drawPreview(res);
+      if (!$('#label').value) $('#label').value = f.name.replace(/\.[^.]+$/, '').slice(0, 60);
+      if (res.areas){
+        current = res;
+        const how = res.mode === 'alpha' ? 'bagian transparan' : 'warna polos';
+        setMsg($('#analyze-msg'), res.areas.length + ' lubang foto terdeteksi dari ' + how + ' (kotak merah di pratinjau). Bingkai ini tampil saat pengguna memilih ' + res.areas.length + ' foto.', 'ok');
+        $('#btn-save').disabled = false;
+      } else if (res.tooMany){
+        setMsg($('#analyze-msg'), 'Lubang terlalu banyak (maksimal 6). Hapus lubang kecil atau dekorasi yang transparan.', 'err');
+      } else {
+        setMsg($('#analyze-msg'), 'Lubang foto tidak terdeteksi. Pastikan lubang transparan, atau diisi satu warna polos (hijau, magenta, cyan, kuning).', 'err');
+      }
+    }catch(e){
+      setMsg($('#analyze-msg'), 'Gagal memproses gambar: ' + e.message, 'err');
+    }
+  }
+
+  // Perkecil gambar kalau terlalu besar untuk dikirim (batas request Vercel sekitar 4.5 MB)
+  async function fitSize(res, limitBytes){
+    if (dataBytes(res.dataURL) <= limitBytes){
+      return { dataURL: res.dataURL, width: res.width, height: res.height, areas: res.areas };
+    }
+    const img = await loadImage(res.dataURL);
+    const attempts = [[1, .85], [1, .75], [.85, .8], [.7, .8], [.6, .7], [.5, .7]];
+    for (const [sc, q] of attempts){
+      const w = Math.round(res.width * sc), h = Math.round(res.height * sc);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const u = c.toDataURL('image/webp', q);
+      if (dataBytes(u) <= limitBytes){
+        const kx = w / res.width, ky = h / res.height;
+        const areas = res.areas.map(a=>({
+          x: Math.round(a.x * kx), y: Math.round(a.y * ky),
+          width: Math.round(a.width * kx), height: Math.round(a.height * ky)
+        }));
+        return { dataURL: u, width: w, height: h, areas };
+      }
+    }
+    throw new Error('Gambar terlalu besar, kecilkan ukurannya di Canva');
+  }
+
+  async function save(){
+    if (!current) return;
+    $('#btn-save').disabled = true;
+    setMsg($('#save-msg'), 'Menyimpan...');
+    try{
+      const fit = await fitSize(current, 3200000);
+      const label = ($('#label').value || '').trim() || 'Bingkai';
+      await api('save', 'POST', {
+        label,
+        canvasWidth: fit.width,
+        canvasHeight: fit.height,
+        photoAreas: fit.areas,
+        image: fit.dataURL
+      });
+      setMsg($('#save-msg'), 'Tersimpan. Muncul di aplikasi dalam sekitar 1 menit.', 'ok');
+      toast('Bingkai tersimpan');
+      current = null;
+      $('#file').value = ''; $('#label').value = '';
+      $('#preview-wrap').hidden = true;
+      setMsg($('#analyze-msg'), '');
+      await refreshList();
+    }catch(e){
+      setMsg($('#save-msg'), e.message, 'err');
+      $('#btn-save').disabled = false;
+    }
+  }
+
+  $('#btn-login').addEventListener('click', login);
+  $('#pw').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') login(); });
+  $('#btn-logout').addEventListener('click', logout);
+  $('#file').addEventListener('change', onFile);
+  $('#btn-save').addEventListener('click', save);
+
+  if (PW){
+    api('list').then(showApp).catch(()=>{ try{ localStorage.removeItem('snapin_admin_pw'); }catch(e){} });
+  }
+})();
+</script>
+</body>
+</html>
