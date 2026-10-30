@@ -1,0 +1,18 @@
+{
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" }
+  ],
+  "functions": {
+    "api/qris.js": { "maxDuration": 30 },
+    "api/qris-callback.js": { "maxDuration": 20 }
+  },
+  "headers": [
+    {
+      "source": "/admin.html",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}
