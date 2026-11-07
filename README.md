@@ -59,3 +59,13 @@ GVSUPERZSTORE, biarkan di sana, pembayaran Snapin tetap terkonfirmasi lewat peng
 Batas yang perlu kamu tahu:
 - Catatan **Penjualan** terisi saat aplikasi pembeli mengonfirmasi. Data resmi ada di dashboard PunyaKios.
 - Kunci fitur premium (Studio, video berbingkai) dijaga di sisi aplikasi; yang dijaga ketat di server hanyalah **gambar bingkai berbayar**.
+
+---
+
+## Update v4: deteksi bingkai lebih kuat, mendukung strip 1 sampai 6 foto
+- Warna kunci diambil dari warna yang paling banyak dipakai di lubang (bukan rata-rata), jadi hijau di desain tidak menggeser warna kunci.
+- Bagian dalam lubang dijamin transparan 100%; hanya tepi yang dihaluskan dan dinetralkan dari sisa hijau. Warna sama di luar lubang tidak disentuh.
+- Kalau gambar punya warna polos besar DAN sedikit celah transparan, yang dipakai adalah yang luasnya jauh lebih besar.
+- Strip 1 sampai 6 foto (satu kolom, dua kolom, grid, strip landscape, lubang berukuran campur, lubang yang menempel ke tepi gambar) terdeteksi. Lubang minimal 0.4% luas gambar.
+- Rasio ditebak dari SEMUA lubang; kalau tidak seragam, bingkai berlaku untuk semua rasio.
+- Setelah upload, pesan hasil deteksi menyebut warna kunci yang dipakai. Bingkai lama yang masih bermasalah sebaiknya diupload ulang.

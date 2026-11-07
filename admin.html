@@ -182,7 +182,7 @@ const FrameDetect = (function(){
   const KEYS = [[255,0,255],[0,255,0],[0,255,255],[255,255,0]];
   const KEY_NEAR = 90;      // jarak warna untuk menandai "lubang" saat mendeteksi
   const KEY_T0 = 60, KEY_T1 = 120; // jarak warna: <=T0 transparan penuh, T0..T1 transparan sebagian
-  const MIN_AREA = 0.008;   // lubang minimal 0.8% dari luas gambar
+  const MIN_AREA = 0.004;   // lubang minimal 0.4% dari luas gambar (strip 6 foto tetap terbaca)
   const MAX_HOLES = 6;
 
   function d2(r,g,b,k){ const dr=r-k[0], dg=g-k[1], db=b-k[2]; return dr*dr+dg*dg+db*db; }
@@ -255,15 +255,22 @@ const FrameDetect = (function(){
     const total = mw*mh;
     let comps = components(mask, mw, mh).filter(c=>{
       if (c.area < total*MIN_AREA) return false;
-      if (mode === 'alpha' && c.border) return false;   // area transparan di tepi = bagian desain, bukan lubang
       const bw = c.maxx-c.minx+1, bh = c.maxy-c.miny+1;
-      if (c.area / (bw*bh) < 0.3) return false;
+      const fill = c.area / (bw*bh);
+      if (mode === 'alpha' && c.border){
+        // transparan di tepi biasanya sudut/margin desain, TAPI lubang strip yang menempel ke sisi gambar
+        // (foto sampai tepi) berbentuk persegi penuh: itu tetap lubang.
+        const sides = (c.minx===0?1:0) + (c.miny===0?1:0) + (c.maxx===mw-1?1:0) + (c.maxy===mh-1?1:0);
+        if (fill < 0.9 || sides >= 4 || c.area > total*0.6) return false;
+      }
+      if (fill < 0.3) return false;
       return true;
     });
     // buang "lubang palsu" kecil (mis. mainan hijau di desain) kalau ada lubang jauh lebih besar
     if (comps.length > 1){
       const mA = Math.max.apply(null, comps.map(c=>c.area));
-      comps = comps.filter(c=>c.area >= mA*0.2);
+      // lubang yang ukurannya beda jauh (strip campuran besar + kecil) tetap dipakai kalau cukup besar di gambar
+      comps = comps.filter(c=>c.area >= mA*0.2 || c.area >= total*0.02);
     }
     let tooMany = false;
     if (comps.length > MAX_HOLES){
@@ -292,12 +299,10 @@ const FrameDetect = (function(){
     return { mode, key, areas: readingOrder(areas), tooMany };
   }
 
-  function analyze(data, w, h){
-    const step = Math.max(1, Math.floor(Math.sqrt((w*h)/200000)));
-    // 1) lubang transparan
-    const a = tryMode(data, w, h, step, 'alpha', null);
-    if (a.areas.length) return a;
-    // 2) lubang berwarna polos (hijau / magenta / dst) kalau PNG tidak transparan
+  function totalArea(r){ return r.areas.reduce((s,a)=>s+a.width*a.height, 0); }
+
+  // Kandidat lubang berwarna polos (hijau / magenta / cyan / kuning)
+  function keyCandidate(data, w, h, step){
     let bestKey = null, bestCount = 0, samples = 0;
     const counts = KEYS.map(()=>0);
     for (let y=Math.floor(step/2); y<h; y+=step){
@@ -313,65 +318,110 @@ const FrameDetect = (function(){
     for (let k=0; k<KEYS.length; k++){ if (counts[k] > bestCount){ bestCount = counts[k]; bestKey = KEYS[k]; } }
     if (bestKey && bestCount >= samples*0.015){
       bestKey = refineKey(data, w, h, step, bestKey);
-      const kres = tryMode(data, w, h, step, 'key', bestKey);
-      if (kres.areas.length || kres.tooMany) return kres;
+      return tryMode(data, w, h, step, 'key', bestKey);
     }
+    return null;
+  }
+
+  function analyze(data, w, h){
+    const step = Math.max(1, Math.floor(Math.sqrt((w*h)/200000)));
+    // 1) lubang transparan, 2) lubang berwarna polos. Kalau dua-duanya ada (mis. hijau polos + celah
+    // transparan kecil di desain), pilih yang luasnya jauh lebih besar supaya hijau tidak terlewat.
+    const a = tryMode(data, w, h, step, 'alpha', null);
+    const k = keyCandidate(data, w, h, step);
+    if (a.areas.length && k && k.areas.length && totalArea(k) > totalArea(a)*1.5) return k;
+    if (a.areas.length) return a;
+    if (k && (k.areas.length || k.tooMany)) return k;
     return { mode:'none', key:null, areas:[], tooMany: a.tooMany };
   }
 
-  // Warna kunci sebenarnya jarang persis (0,255,0): ambil rata-rata warna dominan di sekitar warna nominal
+  // Warna kunci sebenarnya jarang persis (0,255,0). Ambil warna yang PALING BANYAK dipakai (modus), bukan
+  // rata-rata, supaya hijau di desain (mis. karakter hijau muda) tidak menggeser warna kunci.
   function refineKey(data, w, h, step, nominal){
-    let sr=0, sg=0, sb=0, n=0;
+    const bins = new Map();
     for (let y=Math.floor(step/2); y<h; y+=step){
       for (let x=Math.floor(step/2); x<w; x+=step){
         const i=(y*w+x)*4;
         if (data[i+3] <= 200) continue;
-        if (d2(data[i], data[i+1], data[i+2], nominal) < KEY_NEAR*KEY_NEAR){ sr+=data[i]; sg+=data[i+1]; sb+=data[i+2]; n++; }
+        if (d2(data[i], data[i+1], data[i+2], nominal) >= KEY_NEAR*KEY_NEAR) continue;
+        const b = ((data[i]>>3)<<10) | ((data[i+1]>>3)<<5) | (data[i+2]>>3);
+        const e = bins.get(b);
+        if (e){ e.n++; e.r+=data[i]; e.g+=data[i+1]; e.b+=data[i+2]; } else bins.set(b, { n:1, r:data[i], g:data[i+1], b:data[i+2] });
       }
     }
-    return n ? [Math.round(sr/n), Math.round(sg/n), Math.round(sb/n)] : nominal;
+    let top = null;
+    bins.forEach(e=>{ if (!top || e.n > top.n) top = e; });
+    return top ? [Math.round(top.r/top.n), Math.round(top.g/top.n), Math.round(top.b/top.n)] : nominal;
   }
 
-  // Hapus warna kunci HANYA di area yang tersambung ke lubang (flood fill), jadi warna yang sama di desain
-  // (misal dinosaurus hijau) tidak ikut hilang. Tepi dihaluskan + warna hijau sisa (spill) dinetralkan.
+  // Hapus warna kunci di sekitar tiap lubang foto. Piksel yang tersambung ke warna kunci (flood fill)
+  // dihapus; bagian DALAM lubang dijamin transparan 100% berapa pun warnanya, hanya tepi yang dihaluskan
+  // dan dinetralkan dari sisa hijau (spill). Warna sama di luar area lubang (mis. dinosaurus hijau) aman.
   const FLOOD = 150, A0 = 70;
-  function applyKey(data, w, h, key){
-    const n = w*h;
+  function expandRect(a, w, h){
+    const m = Math.round(Math.min(w,h)*0.012) + 6;
+    return {
+      x0: Math.max(0, Math.floor(a.x - m)), y0: Math.max(0, Math.floor(a.y - m)),
+      x1: Math.min(w, Math.ceil(a.x + a.width + m)), y1: Math.min(h, Math.ceil(a.y + a.height + m))
+    };
+  }
+  function applyKey(data, w, h, key, areas){
+    const list = (areas && areas.length) ? areas : [{ x:0, y:0, width:w, height:h }];
+    list.forEach(a=>{ const r = expandRect(a, w, h); keyRegion(data, w, h, key, r.x0, r.y0, r.x1, r.y1); });
+  }
+  function keyRegion(data, w, h, key, x0, y0, x1, y1){
+    const rw = x1-x0, rh = y1-y0, n = rw*rh;
+    if (rw <= 0 || rh <= 0) return;
     const dist = new Float32Array(n);
-    for (let p=0; p<n; p++){ const i=p*4; dist[p] = Math.sqrt(d2(data[i], data[i+1], data[i+2], key)); }
+    for (let y=0; y<rh; y++){
+      for (let x=0; x<rw; x++){
+        const i = ((y0+y)*w + (x0+x))*4;
+        dist[y*rw+x] = data[i+3] < 8 ? 999 : Math.sqrt(d2(data[i], data[i+1], data[i+2], key));
+      }
+    }
     const seen = new Uint8Array(n);
     const stack = new Int32Array(n);
     let sp = 0;
-    // benih: piksel yang jelas berwarna kunci
     for (let p=0; p<n; p++){ if (dist[p] < 45){ seen[p]=1; stack[sp++]=p; } }
-    // sebar hanya lewat piksel yang cukup dekat warna kunci
     while (sp){
       const p = stack[--sp];
-      const x = p % w;
-      if (x>0   && !seen[p-1] && dist[p-1] < FLOOD){ seen[p-1]=1; stack[sp++]=p-1; }
-      if (x<w-1 && !seen[p+1] && dist[p+1] < FLOOD){ seen[p+1]=1; stack[sp++]=p+1; }
-      if (p>=w  && !seen[p-w] && dist[p-w] < FLOOD){ seen[p-w]=1; stack[sp++]=p-w; }
-      if (p<n-w && !seen[p+w] && dist[p+w] < FLOOD){ seen[p+w]=1; stack[sp++]=p+w; }
+      const x = p % rw;
+      if (x>0    && !seen[p-1]  && dist[p-1]  < FLOOD){ seen[p-1]=1;  stack[sp++]=p-1; }
+      if (x<rw-1 && !seen[p+1]  && dist[p+1]  < FLOOD){ seen[p+1]=1;  stack[sp++]=p+1; }
+      if (p>=rw  && !seen[p-rw] && dist[p-rw] < FLOOD){ seen[p-rw]=1; stack[sp++]=p-rw; }
+      if (p<n-rw && !seen[p+rw] && dist[p+rw] < FLOOD){ seen[p+rw]=1; stack[sp++]=p+rw; }
+    }
+    // bagian dalam lubang: kikis area kunci 3 piksel; sisanya pasti transparan penuh
+    let inner = seen;
+    for (let r=0; r<3; r++){
+      const next = new Uint8Array(n);
+      for (let p=0; p<n; p++){
+        if (!inner[p]) continue;
+        const x = p % rw;
+        if (x>0 && x<rw-1 && p>=rw && p<n-rw && inner[p-1] && inner[p+1] && inner[p-rw] && inner[p+rw]) next[p] = 1;
+      }
+      inner = next;
     }
     // pita pinggir: piksel di luar area kunci, sampai 3 piksel dari tepi, dinetralkan hijaunya
-    let band = new Uint8Array(n);
+    const band = new Uint8Array(n);
     let cur = seen;
     for (let r=0; r<3; r++){
       const next = new Uint8Array(cur);
       for (let p=0; p<n; p++){
         if (!cur[p]) continue;
-        const x = p % w;
-        if (x>0   && !cur[p-1]) { next[p-1]=1; band[p-1]=1; }
-        if (x<w-1 && !cur[p+1]) { next[p+1]=1; band[p+1]=1; }
-        if (p>=w  && !cur[p-w]) { next[p-w]=1; band[p-w]=1; }
-        if (p<n-w && !cur[p+w]) { next[p+w]=1; band[p+w]=1; }
+        const x = p % rw;
+        if (x>0    && !cur[p-1])  { next[p-1]=1;  band[p-1]=1; }
+        if (x<rw-1 && !cur[p+1])  { next[p+1]=1;  band[p+1]=1; }
+        if (p>=rw  && !cur[p-rw]) { next[p-rw]=1; band[p-rw]=1; }
+        if (p<n-rw && !cur[p+rw]) { next[p+rw]=1; band[p+rw]=1; }
       }
       cur = next;
     }
-    const kmax = Math.max(key[0], key[1], key[2]);
     for (let p=0; p<n; p++){
-      const i = p*4;
-      if (seen[p]){
+      const i = (((y0 + ((p/rw)|0))*w) + (x0 + (p % rw)))*4;
+      if (inner[p]){
+        data[i+3] = 0;
+      } else if (seen[p]){
         const d = dist[p];
         let a = d <= A0 ? 0 : (d - A0) / (FLOOD - A0);
         a = a*a;                       // tepi lebih tajam supaya tidak ada bayangan hijau
@@ -385,12 +435,57 @@ const FrameDetect = (function(){
   // Kurangi dominasi kanal kunci pada piksel tepi (hijau -> abu/kuning netral)
   function despill(data, i, key){
     const r=data[i], g=data[i+1], b=data[i+2];
-    // kanal kunci dominan: ubah ke rata-rata dua kanal lain
     const idx = key[0]>=key[1] && key[0]>=key[2] ? 0 : (key[1]>=key[2] ? 1 : 2);
     const o1 = (idx+1)%3, o2 = (idx+2)%3;
     const v = [r,g,b];
     const lim = Math.max(v[o1], v[o2]);
     if (v[idx] > lim){ v[idx] = lim; data[i]=v[0]; data[i+1]=v[1]; data[i+2]=v[2]; }
+  }
+
+  // Cari warna polos yang mengisi bagian tengah sebuah lubang foto (bingkai lama / bingkai yang
+  // kuncinya belum bersih). Mengembalikan null kalau tengah lubang sudah transparan atau bukan warna polos.
+  function detectSolidKey(data, w, h, a){
+    const cx0 = Math.round(a.x + a.width*0.25),  cx1 = Math.round(a.x + a.width*0.75);
+    const cy0 = Math.round(a.y + a.height*0.25), cy1 = Math.round(a.y + a.height*0.75);
+    const stp = Math.max(1, Math.floor(Math.sqrt(Math.max(1,(cx1-cx0)*(cy1-cy0))/3000)));
+    let total = 0, vis = 0;
+    const bins = new Map();
+    for (let y=Math.max(0,cy0); y<Math.min(h,cy1); y+=stp){
+      for (let x=Math.max(0,cx0); x<Math.min(w,cx1); x+=stp){
+        total++;
+        const i = (y*w+x)*4;
+        if (data[i+3] <= 8) continue;
+        vis++;
+        const b = ((data[i]>>4)<<8) | ((data[i+1]>>4)<<4) | (data[i+2]>>4);
+        const e = bins.get(b);
+        if (e){ e.n++; e.r+=data[i]; e.g+=data[i+1]; e.b+=data[i+2]; } else bins.set(b, { n:1, r:data[i], g:data[i+1], b:data[i+2] });
+      }
+    }
+    if (!total || vis < total*0.3) return null;
+    let top = null;
+    bins.forEach(e=>{ if (!top || e.n > top.n) top = e; });
+    if (!top) return null;
+    const key = [Math.round(top.r/top.n), Math.round(top.g/top.n), Math.round(top.b/top.n)];
+    let near = 0;
+    for (let y=Math.max(0,cy0); y<Math.min(h,cy1); y+=stp){
+      for (let x=Math.max(0,cx0); x<Math.min(w,cx1); x+=stp){
+        const i = (y*w+x)*4;
+        if (data[i+3] > 8 && d2(data[i], data[i+1], data[i+2], key) < 40*40) near++;
+      }
+    }
+    return near >= vis*0.6 ? key : null;
+  }
+  // Bersihkan bingkai yang lubangnya masih berisi warna polos. Hasil: jumlah lubang yang dibersihkan.
+  function cleanWithAreas(data, w, h, areas){
+    let n = 0;
+    (areas||[]).forEach(a=>{
+      const key = detectSolidKey(data, w, h, a);
+      if (!key) return;
+      const r = expandRect(a, w, h);
+      keyRegion(data, w, h, key, r.x0, r.y0, r.x1, r.y1);
+      n++;
+    });
+    return n;
   }
 
   function loadImage(src){
@@ -419,17 +514,17 @@ const FrameDetect = (function(){
       const id = ctx.getImageData(0, 0, w, h);
       res = analyze(id.data, w, h);
       if (res.areas.length && res.mode === 'key'){
-        applyKey(id.data, w, h, res.key);
+        applyKey(id.data, w, h, res.key, res.areas);
         ctx.putImageData(id, 0, 0);
       }
     }catch(e){ /* tidak bisa baca piksel: pakai sebagai bingkai tempel biasa */ }
     let dataURL;
     try{ dataURL = c.toDataURL('image/webp', 0.97); }catch(e){ dataURL = null; }
     if (!dataURL || dataURL.indexOf('data:image/webp') !== 0) dataURL = c.toDataURL('image/png');
-    return { dataURL, width:w, height:h, areas: res.areas.length ? res.areas : null, mode: res.mode, tooMany: !!res.tooMany };
+    return { dataURL, width:w, height:h, areas: res.areas.length ? res.areas : null, mode: res.mode, key: res.key || null, tooMany: !!res.tooMany };
   }
 
-  return { analyze, applyKey, process };
+  return { analyze, applyKey, cleanWithAreas, process };
 })();
 /* FRAMEDETECT:END */
 
@@ -749,11 +844,14 @@ const FrameDetect = (function(){
   // Tebak rasio foto dari bentuk lubang pertama
   function guessRatio(areas){
     if (!areas || !areas.length) return 'any';
-    const a = areas[0]; const r = a.width / a.height;
     const cands = [['1:1',1],['3:4',3/4],['4:3',4/3],['9:16',9/16],['16:9',16/9]];
-    let best = cands[0], bd = 9;
-    cands.forEach(c=>{ const d = Math.abs(Math.log(r / c[1])); if (d < bd){ bd = d; best = c; } });
-    return bd < 0.18 ? best[0] : 'any';
+    const ids = areas.map(a=>{
+      const r = a.width / a.height; let best = cands[0], bd = 9;
+      cands.forEach(c=>{ const d = Math.abs(Math.log(r / c[1])); if (d < bd){ bd = d; best = c; } });
+      return bd < 0.18 ? best[0] : null;
+    });
+    // semua lubang harus sama rasionya; kalau campur / tidak baku, bingkai berlaku untuk semua rasio
+    return ids.every(x=>x && x === ids[0]) ? ids[0] : 'any';
   }
 
   // GIF / WebP animasi / APNG: jangan diproses ulang lewat canvas supaya animasinya tidak hilang
@@ -806,7 +904,7 @@ const FrameDetect = (function(){
         current = res;
         $('#ratio').value = guessRatio(res.areas);
         if (res.areas.length === 1 && $('#kind').value === 'photo' && (res.areas[0].width/res.areas[0].height > 1.5 || res.areas[0].width/res.areas[0].height < 0.67)) { /* biarkan admin memilih */ }
-        const how = res.mode === 'alpha' ? 'bagian transparan' : 'warna polos';
+        const how = res.mode === 'alpha' ? 'bagian transparan' : 'warna polos rgb(' + (res.key||[]).join(',') + ') yang sudah dijadikan transparan';
         setMsg($('#analyze-msg'), res.areas.length + ' lubang foto terdeteksi dari ' + how + (res.animated ? ' (animasi)' : '') + '. Rasio ditebak: ' + RATIO_LABEL[$('#ratio').value] + ' (bisa diubah). Bingkai tampil saat pengguna memilih ' + res.areas.length + ' foto.', 'ok');
         $('#btn-save').disabled = false;
       } else if (res.keyAnimated){
