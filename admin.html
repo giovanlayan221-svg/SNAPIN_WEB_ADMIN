@@ -49,12 +49,20 @@
   .code{ font-family:ui-monospace,Menlo,monospace; font-size:14px; font-weight:700; letter-spacing:.03em; word-break:break-all; }
   .frames-pick{ max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:8px 10px; }
   .frames-pick label{ display:flex; gap:8px; align-items:center; font-weight:500; margin:4px 0; }
+  input[type=number]{ width:100%; padding:9px 8px; border:1px solid var(--line); border-radius:10px; font-size:14px; background:#fff; color:var(--ink); }
+  .manual{ margin-top:14px; border:1px dashed var(--line); border-radius:16px; padding:12px; }
+  .manual summary{ cursor:pointer; font-weight:700; font-size:14px; }
+  .mrow{ display:grid; grid-template-columns:22px repeat(4,1fr) auto; gap:6px; align-items:end; margin-top:8px; }
+  .mrow .no{ font-weight:700; font-size:13px; padding-bottom:10px; text-align:center; }
+  .mrow small{ display:block; font-size:10px; color:var(--muted); margin-bottom:2px; }
+  .mrow button{ padding:8px 10px; font-size:12px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Snapin Admin</h1>
-  <p class="muted">Kelola bingkai untuk semua pengguna aplikasi Snapin.</p>
+  <p class="muted">Kelola bingkai untuk seluruh pengguna aplikasi Snapin.</p>
 
   <section class="card" id="login-card">
     <h2>Masuk</h2>
@@ -67,7 +75,7 @@
   <div id="app" hidden>
     <section class="card">
       <h2>Tambah bingkai</h2>
-      <p class="muted">Upload PNG, WebP, atau GIF (boleh animasi) dari Canva. Lubang foto dikenali otomatis: bagian transparan, atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya.</p>
+      <p class="muted">Unggah PNG, WebP, atau GIF (animasi didukung) dari Canva. Lubang foto dikenali otomatis dari bagian transparan atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya. Mendukung strip 1 sampai 6 foto; jika deteksi otomatis tidak sesuai, gunakan pengaturan lubang manual di bawah pratinjau.</p>
       <label for="file">File bingkai</label>
       <input type="file" id="file" accept="image/png,image/webp,image/gif">
       <label for="label">Nama bingkai</label>
@@ -100,6 +108,30 @@
       </div>
       <div id="preview-wrap" hidden><canvas id="preview"></canvas></div>
       <div class="msg" id="analyze-msg"></div>
+      <details class="manual" id="manual" hidden>
+        <summary>Atur lubang foto secara manual</summary>
+        <p class="muted" style="margin:8px 0 0">Gunakan jika lubang tidak terdeteksi otomatis atau jumlahnya tidak sesuai. Area yang Anda tentukan akan dilubangi (dijadikan transparan) pada bingkai, sehingga strip 1 sampai 6 foto dengan desain apa pun tetap bisa diunggah. Satuan dalam piksel gambar.</p>
+        <div class="grid3" style="margin-top:8px">
+          <div><label for="m-count" style="margin-top:0">Jumlah foto</label>
+            <select id="m-count"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></div>
+          <div><label for="m-cols" style="margin-top:0">Susunan</label>
+            <select id="m-cols"><option value="1">1 kolom (strip)</option><option value="2">2 kolom</option></select></div>
+          <div><label for="m-ratio" style="margin-top:0">Bentuk foto</label>
+            <select id="m-ratio"><option value="0.75">3:4 tegak</option><option value="1">1:1 kotak</option><option value="1.3333">4:3 lanskap</option><option value="1.7778">16:9 lanskap</option><option value="0.5625">9:16 tegak</option></select></div>
+        </div>
+        <div class="grid3" style="margin-top:8px">
+          <div><label for="m-margin" style="margin-top:0">Margin samping (%)</label><input type="number" id="m-margin" value="8" min="0" max="40" step="1"></div>
+          <div><label for="m-top" style="margin-top:0">Margin atas (%)</label><input type="number" id="m-top" value="5" min="0" max="40" step="1"></div>
+          <div><label for="m-bottom" style="margin-top:0">Ruang bawah / logo (%)</label><input type="number" id="m-bottom" value="12" min="0" max="50" step="1"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn ghost" id="m-auto" type="button">Susun otomatis</button>
+          <button class="btn ghost" id="m-add" type="button">Tambah lubang</button>
+        </div>
+        <div id="m-list"></div>
+        <div class="row" style="margin-top:12px"><button class="btn pink" id="m-apply" type="button">Terapkan lubang manual</button></div>
+        <div class="msg" id="m-msg"></div>
+      </details>
       <div class="row" style="margin-top:14px">
         <button class="btn pink" id="btn-save" disabled>Simpan bingkai</button>
       </div>
@@ -578,7 +610,7 @@ const FrameDetect = (function(){
   async function login(){
     PW = $('#pw').value.trim();
     setMsg($('#login-msg'), '');
-    if (!PW){ setMsg($('#login-msg'), 'Isi password dulu', 'err'); return; }
+    if (!PW){ setMsg($('#login-msg'), 'Masukkan password terlebih dahulu', 'err'); return; }
     try{
       await api('list');
       try{ localStorage.setItem('snapin_admin_pw', PW); }catch(e){}
@@ -875,10 +907,102 @@ const FrameDetect = (function(){
     return c.toDataURL('image/webp', 0.7);
   }
 
+  // ===== Editor lubang manual =====
+  let lastRes = null;       // hasil pemrosesan gambar terakhir (tanpa lubang manual)
+  let manualAreas = [];
+  function manualFit(){
+    if (!lastRes) return null;
+    return { dataURL: lastRes.dataURL, width: lastRes.width, height: lastRes.height };
+  }
+  function clampArea(a, w, h){
+    const x = Math.max(0, Math.min(w - 1, Math.round(a.x)));
+    const y = Math.max(0, Math.min(h - 1, Math.round(a.y)));
+    return { x, y, width: Math.max(1, Math.min(w - x, Math.round(a.width))), height: Math.max(1, Math.min(h - y, Math.round(a.height))) };
+  }
+  function autoArrange(){
+    const f = manualFit(); if (!f) return;
+    const n = Number($('#m-count').value), cols = Number($('#m-cols').value);
+    const ratio = Number($('#m-ratio').value);              // lebar / tinggi foto
+    const mx = f.width * (Number($('#m-margin').value) || 0) / 100;
+    const mt = f.height * (Number($('#m-top').value) || 0) / 100;
+    const mb = f.height * (Number($('#m-bottom').value) || 0) / 100;
+    const gap = Math.round(Math.min(f.width, f.height) * 0.02);
+    const rows = Math.ceil(n / cols);
+    const availW = f.width - 2*mx - gap*(cols-1);
+    const availH = f.height - mt - mb - gap*(rows-1);
+    let cw = availW / cols, ch = availH / rows;
+    // pertahankan bentuk foto: kecilkan sisi yang kelebihan
+    if (cw / ch > ratio) cw = ch * ratio; else ch = cw / ratio;
+    const totalW = cw*cols + gap*(cols-1), totalH = ch*rows + gap*(rows-1);
+    const x0 = (f.width - totalW) / 2, y0 = mt + (availH - (totalH - gap*(rows-1))) / 2;
+    manualAreas = [];
+    for (let i = 0; i < n; i++){
+      const r = Math.floor(i / cols), c = i % cols;
+      // baris terakhir yang tidak penuh dipusatkan
+      const inRow = (r === rows-1) ? (n - r*cols) : cols;
+      const rowW = cw*inRow + gap*(inRow-1);
+      const rx = (f.width - rowW) / 2 + c*(cw+gap);
+      manualAreas.push(clampArea({ x: inRow === cols ? x0 + c*(cw+gap) : rx, y: y0 + r*(ch+gap), width: cw, height: ch }, f.width, f.height));
+    }
+    renderManual();
+  }
+  function renderManual(){
+    const f = manualFit(); if (!f) return;
+    const box = $('#m-list'); box.innerHTML = '';
+    manualAreas.forEach((a, i)=>{
+      const row = document.createElement('div'); row.className = 'mrow';
+      row.innerHTML = '<div class="no">' + (i+1) + '</div>' +
+        ['x','y','width','height'].map((k,j)=>'<div><small>' + ['X','Y','Lebar','Tinggi'][j] + '</small><input type="number" data-k="' + k + '" value="' + a[k] + '" min="0" step="1"></div>').join('') +
+        '<button class="btn ghost" type="button">Hapus</button>';
+      row.querySelectorAll('input').forEach(inp=>inp.addEventListener('input', ()=>{
+        const v = Number(inp.value); if (!Number.isFinite(v)) return;
+        manualAreas[i][inp.dataset.k] = v; drawManualPreview();
+      }));
+      row.querySelector('button').addEventListener('click', ()=>{ manualAreas.splice(i,1); renderManual(); });
+      box.appendChild(row);
+    });
+    $('#m-add').disabled = manualAreas.length >= 6;
+    drawManualPreview();
+  }
+  function drawManualPreview(){
+    const f = manualFit(); if (!f) return;
+    drawPreview({ dataURL: f.dataURL, width: f.width, height: f.height, areas: manualAreas.map(a=>clampArea(a, f.width, f.height)) });
+  }
+  async function applyManual(){
+    const f = manualFit();
+    if (!f){ return; }
+    if (lastRes.animated){ setMsg($('#m-msg'), 'Bingkai animasi tidak mendukung pengaturan manual. Gunakan lubang transparan dari Canva.', 'err'); return; }
+    const areas = manualAreas.map(a=>clampArea(a, f.width, f.height));
+    if (areas.length < 1 || areas.length > 6){ setMsg($('#m-msg'), 'Jumlah lubang harus 1 sampai 6.', 'err'); return; }
+    try{
+      const img = await loadImage(f.dataURL);
+      const c = document.createElement('canvas'); c.width = f.width; c.height = f.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, f.width, f.height);
+      areas.forEach(a=>ctx.clearRect(a.x, a.y, a.width, a.height));   // lubangi area foto
+      const dataURL = c.toDataURL('image/webp', 0.97);
+      current = { dataURL, width: f.width, height: f.height, areas, mode: 'manual', key: null };
+      $('#ratio').value = guessRatio(areas);
+      await drawPreview(current);
+      setMsg($('#m-msg'), areas.length + ' lubang manual diterapkan. Rasio disarankan: ' + RATIO_LABEL[$('#ratio').value] + '. Silakan simpan bingkai.', 'ok');
+      setMsg($('#analyze-msg'), areas.length + ' lubang foto (manual). Bingkai tampil saat pengguna memilih ' + areas.length + ' foto.', 'ok');
+      $('#btn-save').disabled = false;
+    }catch(e){ setMsg($('#m-msg'), 'Gagal menerapkan: ' + e.message, 'err'); }
+  }
+  $('#m-auto').addEventListener('click', autoArrange);
+  $('#m-add').addEventListener('click', ()=>{
+    const f = manualFit(); if (!f || manualAreas.length >= 6) return;
+    manualAreas.push(clampArea({ x: f.width*0.1, y: f.height*0.1, width: f.width*0.8, height: f.height*0.2 }, f.width, f.height));
+    renderManual();
+  });
+  $('#m-apply').addEventListener('click', applyManual);
+  ['m-count','m-cols','m-ratio','m-margin','m-top','m-bottom'].forEach(id=>$('#'+id).addEventListener('change', ()=>{ if (lastRes) autoArrange(); }));
+
   async function onFile(){
     const f = $('#file').files[0];
-    current = null;
+    current = null; lastRes = null; manualAreas = [];
     $('#btn-save').disabled = true;
+    $('#manual').hidden = true; $('#manual').open = false; $('#m-list').innerHTML = ''; setMsg($('#m-msg'), '');
     setMsg($('#save-msg'), '');
     if (!f) return;
     setMsg($('#analyze-msg'), 'Memproses...');
@@ -898,6 +1022,9 @@ const FrameDetect = (function(){
           res.width = img.naturalWidth; res.height = img.naturalHeight; res.dataURL = raw;
         }
       }
+      lastRes = res;
+      $('#manual').hidden = false;
+      if (res.areas){ manualAreas = res.areas.map(a=>({ x:a.x, y:a.y, width:a.width, height:a.height })); }
       await drawPreview(res);
       if (!$('#label').value) $('#label').value = f.name.replace(/\.[^.]+$/, '').slice(0, 60);
       if (res.areas){
@@ -905,19 +1032,19 @@ const FrameDetect = (function(){
         $('#ratio').value = guessRatio(res.areas);
         if (res.areas.length === 1 && $('#kind').value === 'photo' && (res.areas[0].width/res.areas[0].height > 1.5 || res.areas[0].width/res.areas[0].height < 0.67)) { /* biarkan admin memilih */ }
         const how = res.mode === 'alpha' ? 'bagian transparan' : 'warna polos rgb(' + (res.key||[]).join(',') + ') yang sudah dijadikan transparan';
-        setMsg($('#analyze-msg'), res.areas.length + ' lubang foto terdeteksi dari ' + how + (res.animated ? ' (animasi)' : '') + '. Rasio ditebak: ' + RATIO_LABEL[$('#ratio').value] + ' (bisa diubah). Bingkai tampil saat pengguna memilih ' + res.areas.length + ' foto.', 'ok');
+        setMsg($('#analyze-msg'), res.areas.length + ' lubang foto terdeteksi dari ' + how + (res.animated ? ' (animasi)' : '') + '. Rasio terdeteksi: ' + RATIO_LABEL[$('#ratio').value] + ' (dapat diubah). Bingkai tampil saat pengguna memilih ' + res.areas.length + ' foto.', 'ok');
         $('#btn-save').disabled = false;
       } else if (res.keyAnimated){
         setMsg($('#analyze-msg'), 'Bingkai animasi harus memakai lubang transparan (bukan warna hijau polos).', 'err');
       } else if (res.tooBigAnimated){
-        setMsg($('#analyze-msg'), 'File animasi terlalu besar (maks sekitar 3 MB). Kecilkan di Canva.', 'err');
+        setMsg($('#analyze-msg'), 'Berkas animasi terlalu besar (maksimal sekitar 3 MB). Perkecil ukurannya di Canva.', 'err');
       } else if (res.tooMany){
-        setMsg($('#analyze-msg'), 'Lubang terlalu banyak (maksimal 6). Hapus lubang kecil atau dekorasi yang transparan.', 'err');
+        setMsg($('#analyze-msg'), 'Lubang terdeteksi lebih dari 6. Hapus dekorasi transparan di Canva, atau gunakan "Atur lubang foto secara manual" di bawah pratinjau.', 'err'); $('#manual').open = true; autoArrange();
       } else {
-        setMsg($('#analyze-msg'), 'Lubang foto tidak terdeteksi. Pastikan lubang transparan, atau diisi satu warna polos (hijau, magenta, cyan, kuning).', 'err');
+        setMsg($('#analyze-msg'), 'Lubang foto tidak terdeteksi otomatis. Gunakan "Atur lubang foto secara manual" di bawah pratinjau untuk menentukan lubangnya sendiri.', 'err'); $('#manual').open = true; autoArrange();
       }
     }catch(e){
-      setMsg($('#analyze-msg'), 'Gagal memproses gambar: ' + e.message, 'err');
+      setMsg($('#analyze-msg'), 'Gambar gagal diproses: ' + e.message, 'err');
     }
   }
 
@@ -949,7 +1076,7 @@ const FrameDetect = (function(){
     if (!current) return;
     const kind = $('#kind').value;
     if (kind === 'video' && current.areas.length !== 1){
-      setMsg($('#save-msg'), 'Bingkai video harus punya tepat 1 lubang foto.', 'err'); return;
+      setMsg($('#save-msg'), 'Bingkai video harus memiliki tepat 1 lubang foto.', 'err'); return;
     }
     if ($('#premium').checked && false){ /* pratinjau selalu dibuat di bawah */ }
     $('#btn-save').disabled = true;
@@ -972,8 +1099,8 @@ const FrameDetect = (function(){
         isPremium: $('#premium').checked,
         priceIdr: $('#price').value
       });
-      setMsg($('#save-msg'), 'Tersimpan. Muncul di aplikasi dalam sekitar 1 menit.', 'ok');
-      toast('Bingkai tersimpan');
+      setMsg($('#save-msg'), 'Berhasil disimpan. Bingkai akan tampil di aplikasi dalam sekitar 1 menit.', 'ok');
+      toast('Bingkai berhasil disimpan');
       current = null;
       $('#file').value = ''; $('#label').value = ''; $('#theme').value = ''; $('#price').value = ''; $('#premium').checked = false;
       $('#preview-wrap').hidden = true;

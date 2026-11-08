@@ -69,3 +69,7 @@ Batas yang perlu kamu tahu:
 - Strip 1 sampai 6 foto (satu kolom, dua kolom, grid, strip landscape, lubang berukuran campur, lubang yang menempel ke tepi gambar) terdeteksi. Lubang minimal 0.4% luas gambar.
 - Rasio ditebak dari SEMUA lubang; kalau tidak seragam, bingkai berlaku untuk semua rasio.
 - Setelah upload, pesan hasil deteksi menyebut warna kunci yang dipakai. Bingkai lama yang masih bermasalah sebaiknya diupload ulang.
+
+## Update v5
+- **Atur lubang foto secara manual** (di bawah pratinjau): tentukan jumlah foto 1 sampai 6, susunan 1 atau 2 kolom, bentuk foto, margin, lalu "Susun otomatis". Setiap lubang dapat disesuaikan lewat angka X, Y, Lebar, Tinggi. Area tersebut dilubangi (dijadikan transparan) saat diterapkan, sehingga strip dengan desain apa pun tetap dapat diunggah walaupun deteksi otomatis gagal. Panel terbuka sendiri saat deteksi otomatis tidak berhasil.
+- Teks dashboard dirapikan agar lebih profesional.
