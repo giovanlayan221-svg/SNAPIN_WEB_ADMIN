@@ -73,3 +73,10 @@ Batas yang perlu kamu tahu:
 ## Update v5
 - **Atur lubang foto secara manual** (di bawah pratinjau): tentukan jumlah foto 1 sampai 6, susunan 1 atau 2 kolom, bentuk foto, margin, lalu "Susun otomatis". Setiap lubang dapat disesuaikan lewat angka X, Y, Lebar, Tinggi. Area tersebut dilubangi (dijadikan transparan) saat diterapkan, sehingga strip dengan desain apa pun tetap dapat diunggah walaupun deteksi otomatis gagal. Panel terbuka sendiri saat deteksi otomatis tidak berhasil.
 - Teks dashboard dirapikan agar lebih profesional.
+
+## Update v6
+- **Bingkai video**: di kartu Unggah bingkai, pilih berkas MP4 atau WebM. Beri warna polos (hijau, magenta, cyan, kuning) pada area lubang foto, atau pakai WebM transparan. Tepat 1 lubang. Sudut lubang bisa dibulatkan (kolom "Sudut lubang membulat").
+  - Di aplikasi, bingkai diulang otomatis selama video pengguna berjalan (bingkai 10 detik pada video 20 detik = 2 kali).
+  - Batas ukuran sekitar 4,2 MB (batas respons Vercel). Berkas yang lebih besar dikecilkan otomatis di browser admin (butuh waktu sepanjang durasi video, jangan tutup halaman). Hasil kompres berformat WebM.
+  - Unggahan video dikirim per potongan (maks 3), jadi tidak kena batas 4,5 MB per request. `api/admin.js` sekarang diberi `maxDuration` 60 detik di `vercel.json`.
+- **Editor desain bingkai** (kartu "Desain bingkai sendiri"): atur ukuran kanvas, jumlah dan bentuk foto, warna latar (polos, gradasi, pola), garis tepi, sudut membulat, garis sekeliling lubang. Tambah stiker unggahan sendiri (tersimpan di browser admin untuk dipakai lagi), bentuk berwarna, stiker bawaan, dan teks. Geser, cubit/tarik untuk ukuran, putar, gandakan, balik, urutan layer, transparansi, urungkan/ulangi. Lubang foto bisa dipindah lewat tombol "Atur lubang foto". Hasil disimpan sebagai bingkai biasa (foto atau video 1 lubang).

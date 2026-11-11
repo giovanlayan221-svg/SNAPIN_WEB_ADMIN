@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import {
-  readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes,
+  readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes, listPrefix, readBlob,
   readDoc, writeDoc, readSettings, PACKS_PREFIX, SALES_PREFIX, SETTINGS_PREFIX, FEATURES,
 } from '../lib/store.js';
 
@@ -8,6 +8,19 @@ const MAX_IMAGE_BYTES = 3400000; // batas isi request Vercel sekitar 4.5 MB (bas
 const RATIOS = ['any', '1:1', '3:4', '4:3', '9:16', '16:9'];
 const KINDS = ['photo', 'video'];
 const MIME = { 'image/webp': 'webp', 'image/png': 'png', 'image/gif': 'gif' };
+// Bingkai video: dikirim per potongan (batas isi request Vercel sekitar 4.5 MB), disusun ulang di server.
+// Batas ukuran akhir mengikuti batas respons fungsi Vercel (sekitar 4.5 MB) karena aplikasi mengunduh lewat /api/img.
+const VIDEO_MIME = { 'video/mp4': 'mp4', 'video/webm': 'webm' };
+const MAX_VIDEO_BYTES = 4300000;
+const MAX_CHUNK_B64 = 3600000;
+const MAX_CHUNKS = 3;
+const UPLOAD_ID_RE = /^[a-z0-9]{8,40}$/;
+
+function looksLikeVideo(buf, type) {
+  if (type === 'video/mp4') return buf.length > 12 && buf.slice(4, 8).toString('latin1') === 'ftyp';
+  if (type === 'video/webm') return buf.length > 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3;
+  return false;
+}
 
 function num(v, min, max) {
   const n = Number(v);
@@ -26,6 +39,9 @@ function publicFrame(f) {
     kind: f.kind || 'photo',
     theme: f.theme || '',
     animated: !!f.animated,
+    mediaType: f.mediaType === 'video' ? 'video' : 'image',
+    duration: f.duration || 0,
+    holeRadius: f.holeRadius || 0,
     isPremium: !!f.isPremium,
     price: f.price || '',
     priceIdr: f.priceIdr || 0,
@@ -68,6 +84,21 @@ export default async function handler(req, res) {
       return res.status(200).json({ frames: out });
     }
 
+    // potongan unggahan video (maks 3 potongan, masing-masing sekitar 2.6 MB)
+    if (req.method === 'POST' && action === 'chunk') {
+      const b = req.body || {};
+      const uid = String(b.uploadId || '');
+      const index = Number(b.index);
+      const data = String(b.data || '');
+      if (!UPLOAD_ID_RE.test(uid)) return res.status(400).json({ error: 'ID unggahan tidak valid' });
+      if (!Number.isInteger(index) || index < 0 || index >= MAX_CHUNKS) return res.status(400).json({ error: 'Potongan tidak valid' });
+      if (!data || data.length > MAX_CHUNK_B64) return res.status(413).json({ error: 'Potongan terlalu besar' });
+      const buf = Buffer.from(data, 'base64');
+      if (!buf.length) return res.status(400).json({ error: 'Potongan kosong' });
+      await putAuto('snapin/tmp/' + uid + '/' + index + '.part', buf, { contentType: 'application/octet-stream', addRandomSuffix: true });
+      return res.status(200).json({ ok: true });
+    }
+
     if (req.method === 'POST' && action === 'save') {
       const b = req.body || {};
       const label = String(b.label || '').trim().slice(0, 60) || 'Bingkai';
@@ -89,22 +120,61 @@ export default async function handler(req, res) {
         }
         cleanAreas.push({ x: Math.round(x), y: Math.round(y), width: Math.round(aw), height: Math.round(ah) });
       }
-      const m = /^data:(image\/(?:webp|png|gif));base64,(.+)$/.exec(String(b.image || ''));
-      if (!m) return res.status(400).json({ error: 'Gambar harus PNG, WebP, atau GIF' });
-      const buf = Buffer.from(m[2], 'base64');
-      if (!buf.length || buf.length > MAX_IMAGE_BYTES) {
-        return res.status(413).json({ error: 'Gambar terlalu besar (maks sekitar 3.4 MB)' });
+      const isVideoFrame = !!b.videoUploadId;
+      let mType = '', buf = null, tmpParts = [];
+      if (isVideoFrame) {
+        const uid = String(b.videoUploadId);
+        mType = String(b.videoType || '');
+        const nChunks = Number(b.videoChunks);
+        if (!UPLOAD_ID_RE.test(uid) || !VIDEO_MIME[mType] || !Number.isInteger(nChunks) || nChunks < 1 || nChunks > MAX_CHUNKS) {
+          return res.status(400).json({ error: 'Data video tidak valid (gunakan MP4 atau WebM)' });
+        }
+        const all = await listPrefix('snapin/tmp/' + uid + '/');
+        const latest = {};
+        all.forEach((blobItem) => {
+          const mm = /\/(\d+)(?:-[^/]*)?\.part$/.exec(blobItem.pathname || '');
+          if (!mm) return;
+          const i = Number(mm[1]);
+          if (!latest[i] || new Date(blobItem.uploadedAt) > new Date(latest[i].uploadedAt)) latest[i] = blobItem;
+        });
+        tmpParts = all;
+        const cleanTmp = async () => { for (const t of all) { try { await deleteBlob(t.url); } catch (e) { /* abaikan */ } } };
+        const bufs = [];
+        for (let i = 0; i < nChunks; i++) {
+          if (!latest[i]) return res.status(400).json({ error: 'Potongan video ke-' + (i + 1) + ' belum terunggah, ulangi unggahan' });
+          bufs.push((await readBlob(latest[i].url)).buffer);
+        }
+        buf = Buffer.concat(bufs);
+        if (!buf.length || buf.length > MAX_VIDEO_BYTES) {
+          await cleanTmp();
+          return res.status(413).json({ error: 'Video terlalu besar (maks sekitar 4.2 MB). Kecilkan di editor admin atau di Canva.' });
+        }
+        if (!looksLikeVideo(buf, mType)) { await cleanTmp(); return res.status(400).json({ error: 'Berkas video tidak dikenali sebagai ' + mType }); }
+        if (!/^data:image\/webp;base64,/.test(String(b.preview || ''))) {
+          await cleanTmp();
+          return res.status(400).json({ error: 'Pratinjau video wajib ada' });
+        }
+      } else {
+        const m = /^data:(image\/(?:webp|png|gif));base64,(.+)$/.exec(String(b.image || ''));
+        if (!m) return res.status(400).json({ error: 'Gambar harus PNG, WebP, atau GIF' });
+        mType = m[1];
+        buf = Buffer.from(m[2], 'base64');
+        if (!buf.length || buf.length > MAX_IMAGE_BYTES) {
+          return res.status(413).json({ error: 'Gambar terlalu besar (maks sekitar 3.4 MB)' });
+        }
       }
       const meta = cleanMeta(b, null);
+      if (isVideoFrame) meta.kind = 'video';
       if (meta.kind === 'video' && cleanAreas.length !== 1) {
         return res.status(400).json({ error: 'Bingkai video harus punya tepat 1 lubang' });
       }
 
       const id = crypto.randomBytes(6).toString('hex');
-      const blob = await putAuto('snapin/frames/' + id + '.' + MIME[m[1]], buf, {
-        contentType: m[1],
+      const blob = await putAuto('snapin/frames/' + id + '.' + (isVideoFrame ? VIDEO_MIME[mType] : MIME[mType]), buf, {
+        contentType: mType,
         addRandomSuffix: false,
       });
+      for (const t of tmpParts) { try { await deleteBlob(t.url); } catch (e) { /* abaikan */ } }
       // pratinjau kecil (dipakai daftar bingkai berbayar sebelum dibuka)
       let previewUrl = '';
       const pm = /^data:image\/webp;base64,(.+)$/.exec(String(b.preview || ''));
@@ -126,8 +196,11 @@ export default async function handler(req, res) {
         photoAreas: cleanAreas,
         blobUrl: blob.url,
         previewUrl,
-        contentType: m[1],
-        animated: !!b.animated,
+        contentType: mType,
+        animated: isVideoFrame ? true : !!b.animated,
+        mediaType: isVideoFrame ? 'video' : 'image',
+        duration: isVideoFrame ? (num(b.duration, 0.5, 600) || 0) : 0,
+        holeRadius: num(b.holeRadius, 0, 3000) || 0,
         ...meta,
         createdAt: Date.now(),
       };
@@ -145,6 +218,7 @@ export default async function handler(req, res) {
       if (!f) return res.status(404).json({ error: 'Bingkai tidak ditemukan' });
       if (b.label !== undefined) f.label = String(b.label || '').trim().slice(0, 60) || f.label;
       Object.assign(f, cleanMeta(b, f));
+      if (f.mediaType === 'video') f.kind = 'video';
       if (f.isPremium && !f.previewUrl) {
         return res.status(400).json({ error: 'Bingkai ini belum punya pratinjau. Upload ulang untuk menjadikannya berbayar.' });
       }

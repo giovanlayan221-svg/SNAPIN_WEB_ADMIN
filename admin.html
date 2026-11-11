@@ -57,6 +57,43 @@
   .mrow small{ display:block; font-size:10px; color:var(--muted); margin-bottom:2px; }
   .mrow button{ padding:8px 10px; font-size:12px; }
   .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  #v-prev{ width:100%; max-height:260px; border-radius:12px; background:#000; margin-top:12px; }
+  /* ===== editor desain bingkai ===== */
+  textarea{ width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; font:inherit; font-size:15px; background:#fff; color:var(--ink); resize:vertical; }
+  input[type=range]{ width:100%; accent-color:var(--pink); }
+  input[type=color]{ width:100%; height:42px; padding:3px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .dz-bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0 8px; }
+  .dz-bar button{ padding:9px 14px; font-size:13px; }
+  #dz-stage{ display:flex; justify-content:center; background:#f4eef2; border-radius:16px; padding:10px; }
+  #dz-box{ position:relative; background:repeating-conic-gradient(#e6dfe4 0% 25%, #f8f4f7 0% 50%) 0 0/16px 16px; box-shadow:0 8px 24px -12px rgba(59,36,71,.4); touch-action:pan-y; user-select:none; -webkit-user-select:none; }
+  #dz-box canvas{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; pointer-events:none; }
+  #dz-host, #dz-ui{ position:absolute; inset:0; }
+  #dz-host{ overflow:hidden; }
+  #dz-ui{ pointer-events:none; }
+  #dz-host .ly{ position:absolute; touch-action:none; cursor:grab; pointer-events:auto; }
+  #dz-host .ly.h{ pointer-events:none; }
+  #dz-host.holes .ly.h{ pointer-events:auto; }
+  #dz-host.holes .ly:not(.h){ pointer-events:none; }
+  #dz-ui .ly{ position:absolute; pointer-events:none; outline:2px solid var(--pink); outline-offset:2px; }
+  #dz-ui .hd{ position:absolute; width:32px; height:32px; margin:-16px 0 0 -16px; border-radius:50%; background:#fff; border:2px solid var(--pink); color:var(--pink); display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none; box-shadow:0 2px 8px rgba(0,0,0,.28); }
+  #dz-ui .hd svg{ width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+  #dz-ui .hd.del{ left:0; top:0; background:var(--pink); color:#fff; }
+  #dz-ui .hd.sc{ left:100%; top:100%; }
+  #dz-ui .hd.rot{ left:50%; top:100%; margin-top:26px; }
+  .dz-tabs{ display:flex; gap:6px; overflow-x:auto; margin:12px 0 4px; padding-bottom:4px; }
+  .dz-tabs button{ flex:none; padding:9px 16px; background:#f4eef2; color:var(--ink); font-size:13px; }
+  .dz-tabs button.on{ background:var(--ink); color:#fff; }
+  .dz-panel[hidden]{ display:none; }
+  .dz-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(58px,1fr)); gap:8px; margin-top:6px; }
+  .dz-grid .it{ position:relative; }
+  .dz-grid button.pick{ width:100%; height:58px; padding:5px; border-radius:12px; background:#f4eef2; border:1px solid var(--line); }
+  .dz-grid img{ width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; }
+  .dz-grid .rm{ position:absolute; right:-4px; top:-4px; width:20px; height:20px; padding:0; border-radius:50%; background:#c0264b; color:#fff; font-size:12px; line-height:20px; }
+  .dz-lay{ display:flex; gap:10px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:12px; margin-top:6px; cursor:pointer; }
+  .dz-lay.on{ border-color:var(--pink); background:#fff0f5; }
+  .dz-lay img{ width:36px; height:36px; object-fit:contain; background:#f4eef2; border-radius:8px; flex:none; }
+  .dz-lay .nm{ flex:1; min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dz-hide{ display:none !important; }
 </style>
 </head>
 <body>
@@ -75,9 +112,9 @@
   <div id="app" hidden>
     <section class="card">
       <h2>Tambah bingkai</h2>
-      <p class="muted">Unggah PNG, WebP, atau GIF (animasi didukung) dari Canva. Lubang foto dikenali otomatis dari bagian transparan atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya. Mendukung strip 1 sampai 6 foto; jika deteksi otomatis tidak sesuai, gunakan pengaturan lubang manual di bawah pratinjau.</p>
+      <p class="muted">Unggah PNG, WebP, atau GIF (animasi didukung) dari Canva, atau video MP4 / WebM sebagai bingkai bergerak (disarankan sekitar 10 detik; di aplikasi akan diulang otomatis sampai video pengguna selesai). Lubang foto dikenali otomatis dari bagian transparan atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya. Mendukung strip 1 sampai 6 foto; jika deteksi otomatis tidak sesuai, gunakan pengaturan lubang manual di bawah pratinjau.</p>
       <label for="file">File bingkai</label>
-      <input type="file" id="file" accept="image/png,image/webp,image/gif">
+      <input type="file" id="file" accept="image/png,image/webp,image/gif,video/mp4,video/webm">
       <label for="label">Nama bingkai</label>
       <input type="text" id="label" maxlength="60" placeholder="Contoh: Pink Strip 4 Foto">
       <div class="grid2">
@@ -105,6 +142,14 @@
       <div class="grid2">
         <label class="chk"><input type="checkbox" id="premium"> Bingkai berbayar</label>
         <div><label for="price" style="margin-top:4px">Harga QRIS (Rp)</label><input type="text" id="price" maxlength="9" inputmode="numeric" placeholder="5000"></div>
+      </div>
+      <div id="video-panel" hidden>
+        <video id="v-prev" muted loop playsinline controls></video>
+        <div class="grid2">
+          <div><label for="hole-r">Sudut lubang membulat (px)</label><input type="number" id="hole-r" value="0" min="0" max="2000" step="1"></div>
+          <div class="muted" id="v-info" style="align-self:end;padding-bottom:12px"></div>
+        </div>
+        <p class="muted" style="margin:6px 0 0">Lubang foto dikenali dari warna polos (hijau, magenta, cyan, kuning) atau bagian transparan pada frame video. Video MP4 tidak mendukung transparan, jadi beri warna polos pada area lubang. Jika berkas lebih dari sekitar 4 MB, ukurannya dikecilkan otomatis di browser ini.</p>
       </div>
       <div id="preview-wrap" hidden><canvas id="preview"></canvas></div>
       <div class="msg" id="analyze-msg"></div>
@@ -136,6 +181,138 @@
         <button class="btn pink" id="btn-save" disabled>Simpan bingkai</button>
       </div>
       <div class="msg" id="save-msg"></div>
+    </section>
+
+    <section class="card" id="dz-card">
+      <h2>Desain bingkai sendiri (editor seperti Canva)</h2>
+      <p class="muted">Buat bingkai langsung di sini tanpa Canva: atur warna latar, pola, garis tepi, unggah stiker sendiri, tambah teks, lalu geser, putar, dan perbesar sesuai keinginan. Lubang foto dibuat otomatis dan bisa diatur. Hasilnya disimpan sebagai bingkai biasa yang langsung tampil di aplikasi.</p>
+      <div class="grid2">
+        <div><label for="dz-kind">Untuk</label><select id="dz-kind"><option value="photo">Foto</option><option value="video">Video (1 lubang)</option></select></div>
+        <div><label for="dz-count">Jumlah foto</label><select id="dz-count"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></div>
+        <div><label for="dz-cols">Susunan</label><select id="dz-cols"><option value="1">1 kolom (strip)</option><option value="2">2 kolom</option></select></div>
+        <div><label for="dz-shape">Bentuk foto</label><select id="dz-shape"><option value="0.75">3:4 tegak</option><option value="1">1:1 kotak</option><option value="1.3333">4:3 lanskap</option><option value="1.7778">16:9 lanskap</option><option value="0.5625">9:16 tegak</option></select></div>
+      </div>
+      <div class="grid2">
+        <div><label for="dz-size">Ukuran kanvas</label><select id="dz-size">
+          <option value="1200x3600" selected>Strip tegak 1:3 (1200x3600)</option>
+          <option value="1200x1800">Tegak 2:3 (1200x1800)</option>
+          <option value="1400x1400">Kotak 1:1 (1400x1400)</option>
+          <option value="1080x1920">Story 9:16 (1080x1920)</option>
+          <option value="1800x1200">Lanskap 3:2 (1800x1200)</option>
+          <option value="1920x1080">Lanskap 16:9 (1920x1080)</option>
+          <option value="custom">Ukuran sendiri</option></select></div>
+        <div id="dz-custom" hidden><label>Lebar x Tinggi (px)</label><div class="grid2"><input type="number" id="dz-cw" value="1200" min="300" max="4000"><input type="number" id="dz-ch" value="1800" min="300" max="4000"></div></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn pink" id="dz-start" type="button">Mulai desain baru</button></div>
+
+      <div id="dz-editor" hidden>
+        <div class="dz-bar">
+          <button class="btn ghost" id="dz-undo" type="button" disabled>Urungkan</button>
+          <button class="btn ghost" id="dz-redo" type="button" disabled>Ulangi</button>
+          <button class="btn ghost" id="dz-holes-toggle" type="button">Atur lubang foto</button>
+          <label class="chk" style="margin:0"><input type="checkbox" id="dz-sample"> Foto contoh</label>
+        </div>
+        <div id="dz-stage">
+          <div id="dz-box">
+            <canvas id="dz-under"></canvas>
+            <canvas id="dz-canvas"></canvas>
+            <div id="dz-host"></div>
+            <div id="dz-ui"></div>
+          </div>
+        </div>
+        <p class="muted" id="dz-hint">Ketuk stiker untuk memilih. 1 jari: geser. 2 jari: perbesar dan putar. Pegangan kanan-bawah: ukuran. Pegangan bulat bawah: putar. Pegangan kiri-atas: hapus.</p>
+
+        <div class="dz-tabs" id="dz-tabs">
+          <button type="button" class="on" data-t="bg">Latar</button>
+          <button type="button" data-t="stk">Stiker</button>
+          <button type="button" data-t="txt">Teks</button>
+          <button type="button" data-t="lay">Layer</button>
+          <button type="button" data-t="save">Simpan</button>
+        </div>
+
+        <div class="dz-panel" data-p="bg">
+          <div class="grid2">
+            <div><label for="dz-bgtype">Jenis latar</label><select id="dz-bgtype"><option value="solid">Warna polos</option><option value="grad">Gradasi</option><option value="pattern">Pola</option></select></div>
+            <div><label for="dz-c1">Warna utama</label><input type="color" id="dz-c1" value="#ffd1e3"></div>
+            <div id="dz-c2w"><label for="dz-c2">Warna kedua</label><input type="color" id="dz-c2" value="#ffffff"></div>
+            <div id="dz-angw"><label for="dz-ang">Arah gradasi: <span id="dz-angv">135</span></label><input type="range" id="dz-ang" min="0" max="360" value="135"></div>
+            <div id="dz-patw"><label for="dz-pat">Pola</label><select id="dz-pat"><option value="dots">Titik</option><option value="stripes">Garis miring</option><option value="checks">Kotak-kotak</option><option value="grid">Garis silang</option><option value="stars">Bintang</option><option value="hearts">Hati</option></select></div>
+            <div id="dz-pcw"><label for="dz-pc">Warna pola</label><input type="color" id="dz-pc" value="#ffffff"></div>
+            <div id="dz-psw"><label for="dz-ps">Ukuran pola: <span id="dz-psv">60</span></label><input type="range" id="dz-ps" min="20" max="200" value="60"></div>
+            <div id="dz-paw"><label for="dz-pa">Kepekatan pola: <span id="dz-pav">60</span>%</label><input type="range" id="dz-pa" min="10" max="100" value="60"></div>
+          </div>
+          <div class="grid2">
+            <div><label for="dz-bw">Garis tepi: <span id="dz-bwv">0</span> px</label><input type="range" id="dz-bw" min="0" max="120" value="0"></div>
+            <div><label for="dz-bc">Warna garis tepi</label><input type="color" id="dz-bc" value="#ffffff"></div>
+            <div><label for="dz-br">Sudut kanvas membulat: <span id="dz-brv">0</span> px</label><input type="range" id="dz-br" min="0" max="300" value="0"></div>
+            <div><label for="dz-hr">Sudut lubang foto: <span id="dz-hrv">24</span> px</label><input type="range" id="dz-hr" min="0" max="400" value="24"></div>
+            <div><label for="dz-hw">Garis di sekeliling lubang: <span id="dz-hwv">0</span> px</label><input type="range" id="dz-hw" min="0" max="60" value="0"></div>
+            <div><label for="dz-hc">Warna garis lubang</label><input type="color" id="dz-hc" value="#ffffff"></div>
+          </div>
+        </div>
+
+        <div class="dz-panel" data-p="stk" hidden>
+          <div class="row"><button class="btn pink" id="dz-upload" type="button">Unggah stiker sendiri</button></div>
+          <input type="file" id="dz-file" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml" multiple hidden>
+          <p class="muted" style="margin:6px 0 0">PNG transparan paling bagus. Stiker yang diunggah muncul di daftar di bawah dan bisa dipakai berulang kali.</p>
+          <label>Stiker saya</label><div class="dz-grid" id="dz-mine"><span class="muted">Belum ada.</span></div>
+          <label>Bentuk dan hiasan (warna mengikuti pilihan ini)</label>
+          <input type="color" id="dz-shapec" value="#ff5c97" style="width:64px;height:38px;padding:2px;border:1px solid var(--line);border-radius:10px">
+          <div class="dz-grid" id="dz-shapes"></div>
+          <label>Stiker bawaan</label><div class="dz-grid" id="dz-builtin"></div>
+        </div>
+
+        <div class="dz-panel" data-p="txt" hidden>
+          <label for="dz-text">Teks (boleh beberapa baris)</label>
+          <textarea id="dz-text" rows="2" maxlength="120" placeholder="Contoh: snapin photobooth"></textarea>
+          <div class="grid2">
+            <div><label for="dz-font">Huruf</label><select id="dz-font">
+              <option value="Georgia, serif">Georgia</option><option value="'Trebuchet MS', sans-serif">Trebuchet</option><option value="Impact, sans-serif">Impact</option>
+              <option value="'Courier New', monospace">Courier</option><option value="'Comic Sans MS', cursive">Comic</option><option value="Arial, sans-serif">Arial</option><option value="'Brush Script MT', cursive">Tulisan tangan</option></select></div>
+            <div><label for="dz-tc">Warna teks</label><input type="color" id="dz-tc" value="#3b2447"></div>
+            <label class="chk"><input type="checkbox" id="dz-tb" checked> Tebal</label>
+            <label class="chk"><input type="checkbox" id="dz-to"> Garis luar putih</label>
+          </div>
+          <div class="row" style="margin-top:12px"><button class="btn pink" id="dz-addtext" type="button">Tambah teks</button><button class="btn ghost" id="dz-applytext" type="button" disabled>Terapkan ke teks terpilih</button></div>
+        </div>
+
+        <div class="dz-panel" data-p="lay" hidden>
+          <div id="dz-props" hidden>
+            <div class="grid2">
+              <div><label for="dz-op">Transparansi: <span id="dz-opv">100</span>%</label><input type="range" id="dz-op" min="5" max="100" value="100"></div>
+              <div><label for="dz-sz">Ukuran: <span id="dz-szv">30</span>%</label><input type="range" id="dz-sz" min="3" max="250" value="30"></div>
+              <div><label for="dz-rt">Putar: <span id="dz-rtv">0</span> derajat</label><input type="range" id="dz-rt" min="-180" max="180" value="0"></div>
+              <div id="dz-recw"><label for="dz-rec">Warna bentuk</label><input type="color" id="dz-rec" value="#ff5c97"></div>
+            </div>
+            <div class="dz-bar" style="margin-top:10px">
+              <button class="btn ghost" id="dz-up" type="button">Naik</button>
+              <button class="btn ghost" id="dz-down" type="button">Turun</button>
+              <button class="btn ghost" id="dz-dup" type="button">Gandakan</button>
+              <button class="btn ghost" id="dz-flip" type="button">Balik</button>
+              <button class="btn ghost" id="dz-center" type="button">Tengah</button>
+              <button class="del" id="dz-del" type="button" style="padding:10px 16px">Hapus</button>
+            </div>
+          </div>
+          <label>Semua layer (paling atas di atas)</label>
+          <div id="dz-layers"></div>
+        </div>
+
+        <div class="dz-panel" data-p="save" hidden>
+          <label for="dz-label">Nama bingkai</label>
+          <input type="text" id="dz-label" maxlength="60" placeholder="Contoh: Pink Sakura 4 Foto">
+          <label for="dz-theme">Tema (opsional)</label>
+          <input type="text" id="dz-theme" maxlength="40" placeholder="Contoh: Kucing lucu, Retro, Natal">
+          <div class="grid2">
+            <label class="chk"><input type="checkbox" id="dz-premium"> Bingkai berbayar</label>
+            <div><label for="dz-price" style="margin-top:4px">Harga QRIS (Rp)</label><input type="text" id="dz-price" maxlength="9" inputmode="numeric" placeholder="5000"></div>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn pink" id="dz-save" type="button">Simpan sebagai bingkai</button>
+            <button class="btn ghost" id="dz-png" type="button">Unduh PNG</button>
+          </div>
+          <div class="msg" id="dz-msg"></div>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -659,7 +836,8 @@ const FrameDetect = (function(){
         const addTag = (t, c)=>{ const e = document.createElement('span'); e.className = 'tag' + (c ? ' ' + c : ''); e.textContent = t; tags.appendChild(e); };
         addTag(RATIO_LABEL[f.ratio || 'any']);
         addTag(f.kind === 'video' ? 'Video' : 'Foto');
-        if (f.animated) addTag('Animasi');
+        if (f.mediaType === 'video') addTag('Bingkai video' + (f.duration ? ' ' + Math.round(f.duration) + ' dtk' : ''), 'prem');
+        else if (f.animated) addTag('Animasi');
         if (f.theme) addTag(f.theme);
         if (f.isPremium) addTag('Berbayar' + (f.price ? ' ' + f.price : ''), 'prem');
         meta.appendChild(name); meta.appendChild(sub); meta.appendChild(tags);
@@ -981,7 +1159,7 @@ const FrameDetect = (function(){
       ctx.drawImage(img, 0, 0, f.width, f.height);
       areas.forEach(a=>ctx.clearRect(a.x, a.y, a.width, a.height));   // lubangi area foto
       const dataURL = c.toDataURL('image/webp', 0.97);
-      current = { dataURL, width: f.width, height: f.height, areas, mode: 'manual', key: null };
+      current = { dataURL, width: f.width, height: f.height, areas, mode: 'manual', key: null, video: !!videoState };
       $('#ratio').value = guessRatio(areas);
       await drawPreview(current);
       setMsg($('#m-msg'), areas.length + ' lubang manual diterapkan. Rasio disarankan: ' + RATIO_LABEL[$('#ratio').value] + '. Silakan simpan bingkai.', 'ok');
@@ -998,13 +1176,245 @@ const FrameDetect = (function(){
   $('#m-apply').addEventListener('click', applyManual);
   ['m-count','m-cols','m-ratio','m-margin','m-top','m-bottom'].forEach(id=>$('#'+id).addEventListener('change', ()=>{ if (lastRes) autoArrange(); }));
 
+  // ===== Bingkai video =====
+  const MAX_VIDEO = 4200000;
+  let videoState = null;      // { blob, type, duration, objectUrl }
+  function randId(n){ const a='abcdefghijklmnopqrstuvwxyz0123456789'; let r=''; const b=crypto.getRandomValues(new Uint8Array(n)); for(let i=0;i<n;i++) r+=a[b[i]%a.length]; return r; }
+  function videoMeta(url){
+    return new Promise((resolve, reject)=>{
+      const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.onloadedmetadata = ()=>resolve(v); v.onerror = ()=>reject(new Error('Video tidak bisa dibaca. Gunakan MP4 (H.264) atau WebM.')); v.src = url;
+    });
+  }
+  function grabFrame(v, t){
+    return new Promise((resolve)=>{
+      let done = false;
+      const fin = ()=>{
+        if (done) return; done = true;
+        const sc = Math.min(1, 2000 / Math.max(v.videoWidth, v.videoHeight));
+        const c = document.createElement('canvas'); c.width = Math.round(v.videoWidth*sc); c.height = Math.round(v.videoHeight*sc);
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/png'));
+      };
+      v.onseeked = fin; setTimeout(fin, 2500);
+      try{ v.currentTime = t; }catch(e){ fin(); }
+    });
+  }
+  // Hasil rekaman browser (WebM) tidak punya durasi di header; tulis durasinya supaya aplikasi bisa mengulang dan mencari posisi dengan benar
+  async function fixWebmDuration(blob, sec){
+    try{
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const vint = (p, keep)=>{                                    // baca angka variabel-panjang EBML
+        const b = buf[p]; let len = 1, mask = 0x80;
+        while (len <= 8 && !(b & mask)){ len++; mask >>= 1; }
+        if (len > 8 || p + len > buf.length) return null;
+        let v = keep ? b : (b & (mask - 1));
+        for (let i = 1; i < len; i++) v = v*256 + buf[p+i];
+        return { len, v, unknown: !keep && v === Math.pow(2, 7*len) - 1 };
+      };
+      const idAt = (p)=>{ const r = vint(p, true); return r && { len:r.len, id:r.v }; };
+      let p = 0;
+      const eh = idAt(p); if (!eh || eh.id !== 0x1A45DFA3) return blob;
+      const ehs = vint(p + eh.len); p += eh.len + ehs.len + ehs.v;
+      const seg = idAt(p); if (!seg || seg.id !== 0x18538067) return blob;
+      const segSizeAt = p + seg.len, segSize = vint(segSizeAt);
+      let q = segSizeAt + segSize.len;                           // awal isi Segment
+      let info = null;
+      while (q < buf.length){
+        const id = idAt(q); if (!id) break;
+        const sz = vint(q + id.len); if (!sz) break;
+        if (id.id === 0x1549A966){ info = { start:q, idLen:id.len, szLen:sz.len, size:sz.v, data:q + id.len + sz.len }; break; }
+        if (id.id === 0x1F43B675 || sz.unknown) break;           // sudah masuk Cluster: tidak ada Info
+        q += id.len + sz.len + sz.v;
+      }
+      if (!info) return blob;
+      // cari TimecodeScale / Duration di dalam Info
+      let scale = 1000000, durAt = -1, durLen = 0, r = info.data;
+      const end = info.data + info.size;
+      while (r < end){
+        const id = idAt(r); if (!id) break; const sz = vint(r + id.len); if (!sz) break;
+        const dataAt = r + id.len + sz.len;
+        if (id.id === 0x2AD7B1){ let v = 0; for (let i = 0; i < sz.v; i++) v = v*256 + buf[dataAt+i]; scale = v || 1000000; }
+        if (id.id === 0x4489){ durAt = dataAt; durLen = sz.v; }
+        r = dataAt + sz.v;
+      }
+      const ticks = sec * 1e9 / scale;
+      const writeFloat = (arr, at, len)=>{ const dv = new DataView(arr.buffer, arr.byteOffset + at, len); if (len === 4) dv.setFloat32(0, ticks); else dv.setFloat64(0, ticks); };
+      if (durAt >= 0 && (durLen === 4 || durLen === 8)){ writeFloat(buf, durAt, durLen); return new Blob([buf], { type:blob.type }); }
+      // belum ada Duration: sisipkan 11 byte di akhir Info
+      const add = new Uint8Array(11); add.set([0x44, 0x89, 0x88]); writeFloat(add, 3, 8);
+      const newSize = info.size + 11;
+      if (newSize >= 0x0FFFFFFF) return blob;
+      const szBytes = new Uint8Array([0x10 | ((newSize >>> 24) & 0x0F), (newSize >>> 16) & 255, (newSize >>> 8) & 255, newSize & 255]);
+      const delta = 11 + (4 - info.szLen);
+      const head = buf.subarray(0, info.start + info.idLen), infoBody = buf.subarray(info.data, end), rest = buf.subarray(end);
+      let segFix = null;
+      if (!segSize.unknown){                                     // ukuran Segment tercatat: ikut dikoreksi
+        const ns = segSize.v + delta; if (ns >= Math.pow(2, 7*segSize.len) - 1) return blob;
+        segFix = new Uint8Array(segSize.len); let t = ns; for (let i = segSize.len - 1; i >= 0; i--){ segFix[i] = t % 256; t = Math.floor(t/256); } segFix[0] |= (0x80 >> (segSize.len - 1));
+      }
+      const out = new Uint8Array(head.length + 4 + infoBody.length + 11 + rest.length);
+      out.set(head, 0); out.set(szBytes, head.length); out.set(infoBody, head.length + 4); out.set(add, head.length + 4 + infoBody.length); out.set(rest, head.length + 4 + infoBody.length + 11);
+      if (segFix) out.set(segFix, segSizeAt);
+      return new Blob([out], { type:blob.type });
+    }catch(e){ return blob; }
+  }
+  // Kecilkan video di browser (diputar ulang lalu direkam ulang, jadi butuh waktu sepanjang durasi video)
+  async function compressVideo(file, target, onProgress){
+    if (!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream)) throw new Error('Browser ini tidak bisa mengecilkan video. Kecilkan dulu di Canva, atau buka admin lewat Chrome.');
+    const url = URL.createObjectURL(file);
+    try{
+      const types = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+      const mime = types.find(t=>MediaRecorder.isTypeSupported(t)) || '';
+      let factor = 0.78, scaleMax = 1080;
+      for (let attempt = 0; attempt < 3; attempt++){
+        const v = await videoMeta(url);
+        const dur = v.duration;
+        const sc = Math.min(1, scaleMax / Math.max(v.videoWidth, v.videoHeight));
+        const w = Math.max(2, Math.round(v.videoWidth*sc/2)*2), h = Math.max(2, Math.round(v.videoHeight*sc/2)*2);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        const stream = c.captureStream(30);
+        const bps = Math.max(300000, Math.floor(target * 8 / dur * factor));
+        const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps });
+        const chunks = []; rec.ondataavailable = e=>{ if (e.data && e.data.size) chunks.push(e.data); };
+        const stopped = new Promise(r=>{ rec.onstop = r; });
+        v.currentTime = 0; rec.start(500);
+        await v.play();
+        await new Promise(res=>{
+          const tick = ()=>{
+            ctx.drawImage(v, 0, 0, w, h);
+            if (onProgress) onProgress(Math.min(99, Math.round(v.currentTime/dur*100)));
+            if (v.ended) return res();
+            requestAnimationFrame(tick);
+          };
+          v.onended = ()=>{ ctx.drawImage(v, 0, 0, w, h); res(); };
+          setTimeout(res, (dur+10)*1000);
+          tick();
+        });
+        try{ v.pause(); }catch(e){}
+        rec.stop(); await stopped;
+        let blob = new Blob(chunks, { type: 'video/webm' });
+        blob = await fixWebmDuration(blob, dur);
+        if (blob.size && blob.size <= target) return blob;
+        factor *= 0.7; scaleMax = Math.round(scaleMax * 0.75);    // masih terlalu besar: ulangi lebih kecil
+      }
+      throw new Error('Video masih terlalu besar setelah dikecilkan. Pendekkan durasinya atau kecilkan resolusinya di Canva.');
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function onVideoFile(f){
+    setMsg($('#analyze-msg'), 'Membaca video...');
+    try{
+      if (!/^video\/(mp4|webm)$/.test(f.type)) throw new Error('Gunakan video MP4 atau WebM.');
+      let blob = f, type = f.type;
+      let meta = await videoMeta(URL.createObjectURL(f));
+      if (meta.duration > 60) throw new Error('Durasi bingkai video maksimal 60 detik (disarankan sekitar 10 detik).');
+      if (f.size > MAX_VIDEO){
+        setMsg($('#analyze-msg'), 'Berkas ' + (f.size/1e6).toFixed(1) + ' MB, mengecilkan video... mohon jangan tutup halaman ini.');
+        blob = await compressVideo(f, MAX_VIDEO - 150000, p=>setMsg($('#analyze-msg'), 'Mengecilkan video... ' + p + '%'));
+        type = 'video/webm';
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      const v = await videoMeta(objectUrl);
+      const dur = isFinite(v.duration) ? v.duration : meta.duration;
+      const poster = await grabFrame(v, Math.min(0.2, dur/2));
+      videoState = { blob, type, duration: dur, objectUrl, vw: v.videoWidth, vh: v.videoHeight };
+      $('#video-panel').hidden = false;
+      $('#v-prev').src = objectUrl;
+      $('#v-info').textContent = 'Durasi ' + dur.toFixed(1) + ' dtk, ' + v.videoWidth + 'x' + v.videoHeight + ', ' + (blob.size/1e6).toFixed(1) + ' MB';
+      $('#kind').value = 'video'; $('#kind').disabled = true;
+      const res = await FrameDetect.process(poster, 2000);
+      res.animated = false;
+      lastRes = res;
+      $('#manual').hidden = false;
+      $('#m-count').value = '1'; $('#m-cols').value = '1';
+      const r = v.videoWidth / v.videoHeight;
+      const opts = [0.75, 1, 1.3333, 1.7778, 0.5625];
+      $('#m-ratio').value = String(opts.reduce((a,b)=>Math.abs(b-r)<Math.abs(a-r)?b:a));
+      if (res.areas && res.areas.length) manualAreas = res.areas.map(a=>({ x:a.x, y:a.y, width:a.width, height:a.height }));
+      await drawPreview(res);
+      if (!$('#label').value) $('#label').value = f.name.replace(/\.[^.]+$/, '').slice(0, 60);
+      if (res.areas && res.areas.length === 1){
+        current = Object.assign({}, res, { video: true });
+        $('#ratio').value = guessRatio(res.areas);
+        setMsg($('#analyze-msg'), 'Bingkai video ' + dur.toFixed(1) + ' detik, 1 lubang foto terdeteksi. Di aplikasi bingkai diulang otomatis: video pengguna 20 detik dengan bingkai 10 detik akan memutar bingkai 2 kali. Rasio: ' + RATIO_LABEL[$('#ratio').value] + '.', 'ok');
+        $('#btn-save').disabled = false;
+      } else {
+        setMsg($('#analyze-msg'), (res.areas && res.areas.length > 1 ? 'Terdeteksi ' + res.areas.length + ' lubang, bingkai video harus tepat 1 lubang. ' : 'Lubang foto tidak terdeteksi otomatis. ') + 'Atur lubang secara manual di bawah pratinjau.', 'err');
+        $('#manual').open = true; if (!manualAreas.length || manualAreas.length !== 1) autoArrange(); else renderManual();
+      }
+    }catch(e){
+      setMsg($('#analyze-msg'), e.message, 'err');
+    }
+  }
+  async function saveVideo(){
+    if (!current || !videoState) return;
+    if (!current.areas || current.areas.length !== 1){ setMsg($('#save-msg'), 'Bingkai video harus memiliki tepat 1 lubang foto.', 'err'); return; }
+    $('#btn-save').disabled = true;
+    try{
+      const blob = videoState.blob;
+      if (blob.size > MAX_VIDEO) throw new Error('Video terlalu besar.');
+      const CH = 2400000, n = Math.ceil(blob.size / CH), uid = randId(20);
+      for (let i = 0; i < n; i++){
+        setMsg($('#save-msg'), 'Mengunggah video ' + (i+1) + '/' + n + '...');
+        const part = blob.slice(i*CH, (i+1)*CH);
+        const b64 = (await fileToDataURL(part)).split(',')[1];
+        let tries = 0;
+        for (;;){
+          try{ await api('chunk', 'POST', { uploadId: uid, index: i, data: b64 }); break; }
+          catch(e){ if (++tries >= 3 || e.status === 401 || e.status === 413 || e.status === 400) throw e; await new Promise(r=>setTimeout(r, 1200*tries)); }
+        }
+      }
+      setMsg($('#save-msg'), 'Menyimpan...');
+      const base = current.dataURL;     // gambar sampul: frame pertama dengan lubang transparan
+      const preview = await makePreview(base, current.width, current.height);
+      const label = ($('#label').value || '').trim() || 'Bingkai video';
+      await api('save', 'POST', {
+        label,
+        canvasWidth: current.width,
+        canvasHeight: current.height,
+        photoAreas: current.areas,
+        videoUploadId: uid,
+        videoChunks: n,
+        videoType: videoState.type,
+        duration: Math.round(videoState.duration*100)/100,
+        holeRadius: Math.max(0, Number($('#hole-r').value) || 0),
+        preview,
+        ratio: $('#ratio').value,
+        kind: 'video',
+        theme: $('#theme').value,
+        isPremium: $('#premium').checked,
+        priceIdr: $('#price').value
+      });
+      setMsg($('#save-msg'), 'Berhasil disimpan. Bingkai video akan tampil di aplikasi dalam sekitar 1 menit.', 'ok');
+      toast('Bingkai video tersimpan');
+      resetUploadForm();
+      await refreshList();
+    }catch(e){
+      setMsg($('#save-msg'), e.message, 'err');
+      $('#btn-save').disabled = false;
+    }
+  }
+  function resetUploadForm(){
+    current = null; lastRes = null; manualAreas = [];
+    if (videoState){ try{ URL.revokeObjectURL(videoState.objectUrl); }catch(e){} }
+    videoState = null;
+    $('#video-panel').hidden = true; $('#v-prev').removeAttribute('src'); $('#kind').disabled = false;
+    $('#file').value = ''; $('#label').value = ''; $('#theme').value = ''; $('#price').value = ''; $('#premium').checked = false;
+    $('#preview-wrap').hidden = true; $('#manual').hidden = true; $('#m-list').innerHTML = '';
+    setMsg($('#analyze-msg'), '');
+  }
+
   async function onFile(){
     const f = $('#file').files[0];
     current = null; lastRes = null; manualAreas = [];
     $('#btn-save').disabled = true;
     $('#manual').hidden = true; $('#manual').open = false; $('#m-list').innerHTML = ''; setMsg($('#m-msg'), '');
     setMsg($('#save-msg'), '');
+    if (videoState){ try{ URL.revokeObjectURL(videoState.objectUrl); }catch(e){} videoState = null; }
+    $('#video-panel').hidden = true; $('#kind').disabled = false;
     if (!f) return;
+    if (/^video\//.test(f.type)) return onVideoFile(f);
     setMsg($('#analyze-msg'), 'Memproses...');
     try{
       const raw = await fileToDataURL(f);
@@ -1074,6 +1484,7 @@ const FrameDetect = (function(){
 
   async function save(){
     if (!current) return;
+    if (current.video) return saveVideo();
     const kind = $('#kind').value;
     if (kind === 'video' && current.areas.length !== 1){
       setMsg($('#save-msg'), 'Bingkai video harus memiliki tepat 1 lubang foto.', 'err'); return;
@@ -1123,10 +1534,723 @@ const FrameDetect = (function(){
   $('#pk-all').addEventListener('change', renderPackFrames);
   $('#code-scope').addEventListener('change', renderCodeFrames);
 
+  window.__SN = { api, toast, setMsg, refreshList, makePreview, fitSize, guessRatio, RATIO_LABEL, dataBytes };
+
   if (PW){
     api('list').then(showApp).catch(()=>{ try{ localStorage.removeItem('snapin_admin_pw'); }catch(e){} });
   }
 })();
+</script>
+<script>
+/* ============================================================
+   EDITOR DESAIN BINGKAI (admin)
+   - Semua tampilan digambar di canvas (sama persis dengan hasil unggah)
+   - Kotak sentuh transparan di #dz-host + pegangan di #dz-ui untuk geser / putar / ubah ukuran
+   ============================================================ */
+(function(){
+  const SN = window.__SN; if (!SN) return;
+  const $ = (s)=>document.querySelector(s);
+  const clampN = (v,a,b)=> Math.max(a, Math.min(b, v));
+  const uid = (p)=> (p||'l') + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+  const D = {
+    W:1200, H:1800, kind:'photo',
+    bg:{ type:'solid', c1:'#ffd1e3', c2:'#ffffff', ang:135, pat:'dots', pc:'#ffffff', pa:60, ps:60 },
+    border:{ w:0, c:'#ffffff', r:0 },
+    hole:{ r:24, sw:0, sc:'#ffffff' },
+    layers:[], holeEdit:false, sample:false
+  };
+  let SEL = null, started = false;
+  let hist = [], histPos = -1;
+  const imgCache = new Map();
+  let mine = [];            // stiker yang diunggah admin: { id, src }
+
+  /* ---------- gambar ---------- */
+  function loadImg(src){
+    if (imgCache.has(src)){ const v = imgCache.get(src); if (v instanceof Promise) return v; return Promise.resolve(v); }
+    const p = new Promise((res, rej)=>{
+      const i = new Image(); i.onload = ()=>{ imgCache.set(src, i); res(i); }; i.onerror = ()=>{ imgCache.delete(src); rej(new Error('gagal')); }; i.src = src;
+    });
+    imgCache.set(src, p);
+    return p;
+  }
+  function readyImg(src){ const v = imgCache.get(src); return (v && !(v instanceof Promise)) ? v : null; }
+  function svgURL(inner, vb){
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="' + (vb||'0 0 100 100') + '">' + inner + '</svg>');
+  }
+
+  /* ---------- bentuk & stiker bawaan ---------- */
+  const SHAPES = [
+    { id:'circle',  name:'Lingkaran', svg:c=>'<circle cx="50" cy="50" r="46" fill="'+c+'"/>' },
+    { id:'square',  name:'Kotak',     svg:c=>'<rect x="6" y="6" width="88" height="88" fill="'+c+'"/>' },
+    { id:'round',   name:'Kotak bulat', svg:c=>'<rect x="6" y="6" width="88" height="88" rx="22" fill="'+c+'"/>' },
+    { id:'ring',    name:'Cincin',    svg:c=>'<circle cx="50" cy="50" r="42" fill="none" stroke="'+c+'" stroke-width="10"/>' },
+    { id:'bar',     name:'Garis',     svg:c=>'<rect x="2" y="38" width="96" height="24" rx="12" fill="'+c+'"/>' },
+    { id:'tri',     name:'Segitiga',  svg:c=>'<path d="M50 8L94 90H6z" fill="'+c+'" stroke="'+c+'" stroke-width="6" stroke-linejoin="round"/>' },
+    { id:'tape',    name:'Selotip',   svg:c=>'<rect x="2" y="30" width="96" height="40" fill="'+c+'" fill-opacity=".72"/><path d="M2 30l5 5-5 5 5 5-5 5 5 5-5 5M98 30l-5 5 5 5-5 5 5 5-5 5 5 5" stroke="'+c+'" stroke-opacity=".5" stroke-width="2" fill="none"/>' },
+    { id:'zig',     name:'Zig-zag',   svg:c=>'<path d="M4 60l14-28 14 28 14-28 14 28 14-28 14 28 8-16" fill="none" stroke="'+c+'" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>' },
+    { id:'drop',    name:'Tetes',     svg:c=>'<path d="M50 6C50 6 16 46 16 66a34 34 0 0 0 68 0C84 46 50 6 50 6z" fill="'+c+'"/>' },
+    { id:'heart',   name:'Hati',      svg:c=>'<path d="M50 88C20 66 8 48 8 32 8 19 18 10 30 10c8 0 15 4 20 11C55 14 62 10 70 10c12 0 22 9 22 22 0 16-12 34-42 56z" fill="'+c+'"/>' },
+    { id:'star',    name:'Bintang',   svg:c=>'<path d="M50 6l12 25 27 4-20 19 5 27-24-13-24 13 5-27L11 35l27-4z" fill="'+c+'" stroke="'+c+'" stroke-width="4" stroke-linejoin="round"/>' },
+    { id:'flower',  name:'Bunga',     svg:c=>'<g fill="'+c+'"><circle cx="50" cy="24" r="18"/><circle cx="76" cy="43" r="18"/><circle cx="66" cy="73" r="18"/><circle cx="34" cy="73" r="18"/><circle cx="24" cy="43" r="18"/></g><circle cx="50" cy="50" r="12" fill="#fff" fill-opacity=".85"/>' },
+  ];
+  function shapeSrc(id, color){ const s = SHAPES.find(x=>x.id===id); return svgURL(s.svg(color)); }
+  const BUILTIN = [
+    { id:'b-sparkle', svg:'<g stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"><path fill="#B28CFF" d="M50 6c3 22 8 36 44 44-36 8-41 22-44 44-3-22-8-36-44-44 36-8 41-22 44-44z"/></g>' },
+    { id:'b-bow', svg:'<g stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"><path fill="#FF7BA7" d="M50 50C34 30 10 28 8 44c-2 14 20 22 42 6zM50 50c16-20 40-22 42-6 2 14-20 22-42 6z"/><circle cx="50" cy="50" r="9" fill="#E0407F"/></g>' },
+    { id:'b-cloud', svg:'<g stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"><path fill="#BFE3FF" d="M28 74a18 18 0 0 1-2-36 24 24 0 0 1 46-4 20 20 0 0 1 4 40z"/></g>' },
+    { id:'b-sun', svg:'<g stroke="#FFB02E" stroke-width="7" stroke-linecap="round"><path d="M50 6v10M50 84v10M6 50h10M84 50h10M19 19l7 7M74 74l7 7M81 19l-7 7M26 74l-7 7"/></g><circle cx="50" cy="50" r="22" fill="#FFC83D"/>' },
+    { id:'b-crown', svg:'<g stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"><path fill="#FFD43B" d="M12 76L8 28l24 22 18-30 18 30 24-22-4 48z"/></g><g fill="#FF5C97"><circle cx="50" cy="60" r="5"/><circle cx="28" cy="62" r="4"/><circle cx="72" cy="62" r="4"/></g>' },
+    { id:'b-smile', svg:'<circle cx="50" cy="50" r="42" fill="#FFD43B"/><circle cx="36" cy="42" r="5" fill="#3b2a1e"/><circle cx="64" cy="42" r="5" fill="#3b2a1e"/><path d="M32 60q18 20 36 0" fill="none" stroke="#3b2a1e" stroke-width="5" stroke-linecap="round"/>' },
+    { id:'b-bear', svg:'<circle cx="24" cy="26" r="13" fill="#B07A4F"/><circle cx="76" cy="26" r="13" fill="#B07A4F"/><circle cx="50" cy="54" r="38" fill="#C48B5C"/><ellipse cx="50" cy="66" rx="15" ry="11" fill="#F3D9B8"/><circle cx="37" cy="48" r="4.5" fill="#3b2a1e"/><circle cx="63" cy="48" r="4.5" fill="#3b2a1e"/><ellipse cx="50" cy="62" rx="5" ry="3.5" fill="#3b2a1e"/>' },
+    { id:'b-cat', svg:'<path fill="#FFB36B" d="M14 14l22 14a38 38 0 0 1 28 0l22-14v40a38 34 0 0 1-72 0z"/><circle cx="37" cy="50" r="4.5" fill="#3b2a1e"/><circle cx="63" cy="50" r="4.5" fill="#3b2a1e"/><path d="M44 62l6 5 6-5" fill="none" stroke="#3b2a1e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' },
+    { id:'b-bubble', svg:'<path fill="#fff" stroke="#e5d5df" stroke-width="2" d="M10 20a10 10 0 0 1 10-10h60a10 10 0 0 1 10 10v36a10 10 0 0 1-10 10H46L26 88V66h-6a10 10 0 0 1-10-10z"/><g fill="#FF5C97"><circle cx="34" cy="38" r="5"/><circle cx="50" cy="38" r="5"/><circle cx="66" cy="38" r="5"/></g>' },
+    { id:'b-note', svg:'<path fill="#7C5CFF" d="M38 12l46-8v62a14 12 0 1 1-8-11V30l-30 6v40a14 12 0 1 1-8-11z"/>' },
+    { id:'b-moon', svg:'<path fill="#FFE08A" d="M66 8a42 42 0 1 0 26 66A34 34 0 0 1 66 8z"/>' },
+    { id:'b-camera', svg:'<rect x="8" y="26" width="84" height="56" rx="12" fill="#3b2447"/><rect x="30" y="16" width="24" height="14" rx="5" fill="#3b2447"/><circle cx="50" cy="54" r="19" fill="#fff"/><circle cx="50" cy="54" r="12" fill="#F76A9E"/>' },
+  ];
+  BUILTIN.forEach(b=>{ b.src = svgURL(b.svg); });
+
+  /* ---------- geometri ---------- */
+  function rrPath(ctx, x, y, w, h, r){
+    r = Math.max(0, Math.min(r, w/2, h/2));
+    ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r); ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+  }
+  function holeRect(l){ const w = l.w*D.W, h = w*l.ar; return { x:l.x*D.W - w/2, y:l.y*D.H - h/2, w, h }; }
+  const holes = ()=> D.layers.filter(l=>l.type==='hole');
+
+  /* ---------- menggambar ---------- */
+  function drawPattern(ctx, W, H, bg){
+    const s = bg.ps; ctx.save(); ctx.globalAlpha = bg.pa/100; ctx.fillStyle = bg.pc; ctx.strokeStyle = bg.pc;
+    if (bg.pat === 'dots'){
+      for (let r = 0, y = s/2; y < H + s; y += s, r++) for (let x = (r%2 ? s : s/2); x < W + s; x += s){ ctx.beginPath(); ctx.arc(x, y, s*0.14, 0, Math.PI*2); ctx.fill(); }
+    } else if (bg.pat === 'stripes'){
+      ctx.lineWidth = s*0.2;
+      ctx.beginPath(); for (let k = -H; k < W + s; k += s){ ctx.moveTo(k, 0); ctx.lineTo(k + H, H); } ctx.stroke();
+    } else if (bg.pat === 'checks'){
+      for (let j = 0, y = 0; y < H; y += s, j++) for (let i = 0, x = 0; x < W; x += s, i++) if ((i + j) % 2 === 0) ctx.fillRect(x, y, s, s);
+    } else if (bg.pat === 'grid'){
+      ctx.lineWidth = Math.max(1, s*0.07);
+      ctx.beginPath(); for (let x = 0; x < W; x += s){ ctx.moveTo(x, 0); ctx.lineTo(x, H); } for (let y = 0; y < H; y += s){ ctx.moveTo(0, y); ctx.lineTo(W, y); } ctx.stroke();
+    } else if (bg.pat === 'stars'){
+      for (let r = 0, y = s/2; y < H + s; y += s, r++) for (let x = (r%2 ? s : s/2); x < W + s; x += s){
+        ctx.beginPath(); for (let k = 0; k < 10; k++){ const a = -Math.PI/2 + k*Math.PI/5, rr = k%2 ? s*0.1 : s*0.22; ctx.lineTo(x + Math.cos(a)*rr, y + Math.sin(a)*rr); } ctx.closePath(); ctx.fill();
+      }
+    } else if (bg.pat === 'hearts'){
+      for (let r = 0, y = s/2; y < H + s; y += s, r++) for (let x = (r%2 ? s : s/2); x < W + s; x += s){
+        const u = s*0.2; ctx.beginPath(); ctx.moveTo(x, y + u*0.9);
+        ctx.bezierCurveTo(x - u*1.6, y - u*0.2, x - u*0.8, y - u*1.5, x, y - u*0.5);
+        ctx.bezierCurveTo(x + u*0.8, y - u*1.5, x + u*1.6, y - u*0.2, x, y + u*0.9); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  function drawBackground(ctx, W, H){
+    const bg = D.bg;
+    if (bg.type === 'grad'){
+      const a = bg.ang*Math.PI/180, dx = Math.cos(a), dy = Math.sin(a), half = (Math.abs(W*dx) + Math.abs(H*dy))/2;
+      const g = ctx.createLinearGradient(W/2 - dx*half, H/2 - dy*half, W/2 + dx*half, H/2 + dy*half);
+      g.addColorStop(0, bg.c1); g.addColorStop(1, bg.c2); ctx.fillStyle = g;
+    } else ctx.fillStyle = bg.c1;
+    ctx.fillRect(0, 0, W, H);
+    if (bg.type === 'pattern') drawPattern(ctx, W, H, bg);
+  }
+  function clipCanvas(ctx){
+    ctx.beginPath(); rrPath(ctx, 0, 0, D.W, D.H, D.border.r); ctx.clip();
+  }
+  // lapisan dasar: latar + garis + lubang transparan (lubang dipotong SETELAH garis, stiker digambar sesudahnya)
+  function renderBase(ctx, k){
+    ctx.save(); ctx.scale(k, k); clipCanvas(ctx);
+    drawBackground(ctx, D.W, D.H);
+    if (D.hole.sw > 0){
+      ctx.strokeStyle = D.hole.sc; ctx.lineWidth = D.hole.sw*2; ctx.lineJoin = 'round';
+      holes().forEach(l=>{ const r = holeRect(l); ctx.beginPath(); rrPath(ctx, r.x, r.y, r.w, r.h, D.hole.r); ctx.stroke(); });
+    }
+    if (D.border.w > 0){
+      ctx.strokeStyle = D.border.c; ctx.lineWidth = D.border.w*2;
+      ctx.beginPath(); rrPath(ctx, 0, 0, D.W, D.H, D.border.r); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = '#000';
+    holes().forEach(l=>{ const r = holeRect(l); ctx.beginPath(); rrPath(ctx, r.x, r.y, r.w, r.h, D.hole.r); ctx.fill(); });
+    ctx.restore();
+  }
+  function drawLayer(ctx, l){
+    const img = readyImg(l.src); if (!img) return;
+    const w = l.w*D.W, h = w*l.ar;
+    ctx.save(); ctx.globalAlpha = l.op == null ? 1 : l.op;
+    ctx.translate(l.x*D.W, l.y*D.H); ctx.rotate((l.rot||0)*Math.PI/180); if (l.flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, -w/2, -h/2, w, h); ctx.restore();
+  }
+  function renderLayers(ctx, k, editor){
+    ctx.save(); ctx.scale(k, k); clipCanvas(ctx);
+    D.layers.forEach(l=>{ if (l.type !== 'hole') drawLayer(ctx, l); });
+    if (editor){
+      ctx.setLineDash([14, 10]); ctx.lineWidth = 3; ctx.strokeStyle = '#e11d48'; ctx.fillStyle = '#e11d48';
+      ctx.font = 'bold ' + Math.round(Math.min(D.W, D.H)*0.04) + 'px sans-serif';
+      holes().forEach((l, i)=>{
+        const r = holeRect(l); ctx.beginPath(); rrPath(ctx, r.x, r.y, r.w, r.h, D.hole.r); ctx.stroke();
+        ctx.fillText('Foto ' + (i+1), r.x + 14, r.y + Math.min(D.W, D.H)*0.05);
+      });
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+
+  /* ---------- kanvas editor ---------- */
+  const cvs = $('#dz-canvas'), under = $('#dz-under'), box = $('#dz-box'), host = $('#dz-host'), ui = $('#dz-ui');
+  let K = 1, baseCanvas = null, baseDirty = true, raf = 0, underDirty = true;
+  function layoutStage(){
+    const stage = $('#dz-stage');
+    const availW = Math.max(120, (stage.clientWidth || 320) - 20);
+    const maxH = Math.max(260, window.innerHeight * 0.7);
+    let bw = Math.min(availW, 600, maxH * D.W / D.H), bh = bw * D.H / D.W;
+    box.style.width = Math.round(bw) + 'px'; box.style.height = Math.round(bh) + 'px';
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.max(1, Math.round(bw*dpr)), ph = Math.max(1, Math.round(bh*dpr));
+    [cvs, under].forEach(c=>{ if (c.width !== pw || c.height !== ph){ c.width = pw; c.height = ph; } });
+    K = pw / D.W; baseDirty = true; underDirty = true;
+    schedule();
+  }
+  function schedule(){ if (raf) return; raf = requestAnimationFrame(()=>{ raf = 0; paint(); }); }
+  function paintUnder(){
+    const ctx = under.getContext('2d'); ctx.clearRect(0, 0, under.width, under.height);
+    if (!D.sample) return;
+    ctx.save(); ctx.scale(K, K);
+    holes().forEach((l, i)=>{
+      const r = holeRect(l);
+      ctx.save(); ctx.beginPath(); rrPath(ctx, r.x - 2, r.y - 2, r.w + 4, r.h + 4, D.hole.r); ctx.clip();
+      const g = ctx.createLinearGradient(r.x, r.y, r.x + r.w, r.y + r.h);
+      const hues = [[255,214,170,160,200,255],[190,235,200,120,170,230],[255,200,220,170,150,230]][i % 3];
+      g.addColorStop(0, 'rgb(' + hues.slice(0,3) + ')'); g.addColorStop(1, 'rgb(' + hues.slice(3) + ')');
+      ctx.fillStyle = g; ctx.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+      ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(r.x + r.w/2, r.y + r.h*0.42, Math.min(r.w, r.h)*0.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(r.x + r.w/2, r.y + r.h*0.98, r.w*0.34, r.h*0.3, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+  function paint(){
+    if (!started) return;
+    if (!baseCanvas || baseCanvas.width !== cvs.width || baseCanvas.height !== cvs.height){ baseCanvas = document.createElement('canvas'); baseCanvas.width = cvs.width; baseCanvas.height = cvs.height; baseDirty = true; }
+    if (baseDirty){ const b = baseCanvas.getContext('2d'); b.clearRect(0, 0, baseCanvas.width, baseCanvas.height); renderBase(b, K); baseDirty = false; }
+    if (underDirty){ paintUnder(); underDirty = false; }
+    const ctx = cvs.getContext('2d'); ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.drawImage(baseCanvas, 0, 0);
+    renderLayers(ctx, K, true);
+  }
+  function dirtyBase(){ baseDirty = true; underDirty = true; schedule(); }
+
+  /* ---------- mesin layer (geser, cubit, putar, ubah ukuran) ---------- */
+  const ICON = {
+    del:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    sc:'<svg viewBox="0 0 24 24"><path d="M5 19L19 5M13 5h6v6M11 19H5v-6"/></svg>',
+    rot:'<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5"/></svg>'
+  };
+  const E = { sel:null, ptrs:new Map(), mode:null, g:null, moved:false };
+  const findL = id => D.layers.find(l=>l.id===id) || null;
+  function styleEl(el, l){
+    el.style.left = (l.x*100) + '%'; el.style.top = (l.y*100) + '%'; el.style.width = (l.w*100) + '%';
+    el.style.aspectRatio = (1/l.ar) + '';
+    el.style.transform = 'translate(-50%,-50%) rotate(' + (l.rot||0) + 'deg)';
+  }
+  function renderHost(){
+    host.innerHTML = '';
+    D.layers.forEach(l=>{
+      const el = document.createElement('div'); el.className = 'ly' + (l.type === 'hole' ? ' h' : ''); el.dataset.id = l.id; styleEl(el, l); host.appendChild(el);
+    });
+    host.classList.toggle('holes', D.holeEdit);
+    syncUI();
+  }
+  function syncUI(){
+    ui.innerHTML = '';
+    const l = findL(E.sel); if (!l) return;
+    const el = document.createElement('div'); el.className = 'ly'; el.dataset.id = l.id; styleEl(el, l);
+    const kinds = l.type === 'hole' ? ['sc'] : ['del', 'sc', 'rot'];
+    kinds.forEach(k=>{ const h = document.createElement('div'); h.className = 'hd ' + k; h.dataset.h = k; h.innerHTML = ICON[k]; el.appendChild(h); });
+    ui.appendChild(el);
+  }
+  function selectLayer(id, silent){
+    E.sel = id; SEL = id; syncUI(); if (!silent){ refreshProps(); renderLayerList(); }
+  }
+  function refreshEl(){
+    const l = findL(E.sel); if (!l) return;
+    [host, ui].forEach(h=>{ const el = h.querySelector('.ly[data-id="' + E.sel + '"]'); if (el) styleEl(el, l); });
+  }
+  const rectOf = ()=> host.getBoundingClientRect();
+  function snapG(){ const l = findL(E.sel), r = rectOf(); return { x:l.x, y:l.y, w:l.w, rot:l.rot||0, r, cx:r.left + l.x*r.width, cy:r.top + l.y*r.height }; }
+  const twoPts = ()=>{ const a = [...E.ptrs.values()]; return [a[0], a[1]]; };
+  function startPinch(){
+    const [p, q] = twoPts(); const g = snapG();
+    g.d0 = Math.hypot(q.x-p.x, q.y-p.y) || 1; g.a0 = Math.atan2(q.y-p.y, q.x-p.x); g.mx = (p.x+q.x)/2; g.my = (p.y+q.y)/2;
+    E.g = g; E.mode = 'pinch';
+  }
+  function limitsOf(l){ return l.type === 'hole' ? [0.1, 1] : [0.03, 3]; }
+  function onDown(e){
+    const t = e.target;
+    const inside = host.contains(t) || ui.contains(t);
+    if (!inside && E.ptrs.size === 0) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    E.ptrs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    const hd = t.closest && t.closest('[data-h]');
+    const lyEl = t.closest && t.closest('.ly');
+    if (E.ptrs.size === 1){
+      E.moved = false;
+      if (hd && E.sel){
+        const k = hd.dataset.h;
+        if (k === 'del'){ E.ptrs.clear(); removeSelected(); return; }
+        E.mode = k; E.g = snapG();
+        E.g.d0 = Math.hypot(e.clientX - E.g.cx, e.clientY - E.g.cy) || 1;
+        E.g.a0 = Math.atan2(e.clientY - E.g.cy, e.clientX - E.g.cx);
+        e.preventDefault();
+      } else if (lyEl && host.contains(t)){
+        const id = lyEl.dataset.id;
+        if (id !== E.sel) selectLayer(id);
+        E.mode = 'drag'; E.g = snapG(); E.g.sx = e.clientX; E.g.sy = e.clientY;
+      } else { E.mode = 'none'; }
+    } else if (E.sel && E.ptrs.size === 2 && E.mode !== 'none'){
+      startPinch();
+    }
+  }
+  function onMove(e){
+    if (!E.ptrs.has(e.pointerId)) return;
+    E.ptrs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if (!E.mode || E.mode === 'none') return;
+    const l = findL(E.sel); if (!l) return; const g = E.g; const [mn, mx] = limitsOf(l);
+    if (E.mode === 'drag' && E.ptrs.size === 1){
+      const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+      if (Math.hypot(dx, dy) > 3) E.moved = true;
+      if (!E.moved) return;
+      let nx = clampN(g.x + dx/g.r.width, 0, 1), ny = clampN(g.y + dy/g.r.height, 0, 1);
+      if (Math.abs(nx - 0.5) < 0.012) nx = 0.5;      // menempel di tengah
+      if (Math.abs(ny - 0.5) < 0.012) ny = 0.5;
+      l.x = nx; l.y = ny;
+    } else if (E.mode === 'sc'){
+      const d = Math.hypot(e.clientX - g.cx, e.clientY - g.cy);
+      l.w = clampN(g.w*d/g.d0, mn, mx); E.moved = true;
+    } else if (E.mode === 'rot'){
+      const a = Math.atan2(e.clientY - g.cy, e.clientX - g.cx);
+      let r = g.rot + (a - g.a0)*180/Math.PI; r = ((r%360) + 540)%360 - 180;
+      const near = Math.round(r/90)*90; if (Math.abs(r - near) < 4) r = near;
+      l.rot = Math.round(r*10)/10; E.moved = true;
+    } else if (E.mode === 'pinch' && E.ptrs.size >= 2){
+      const [p, q] = twoPts();
+      const d = Math.hypot(q.x-p.x, q.y-p.y) || 1, a = Math.atan2(q.y-p.y, q.x-p.x);
+      const mxp = (p.x+q.x)/2, myp = (p.y+q.y)/2;
+      l.w = clampN(g.w*d/g.d0, mn, mx);
+      if (l.type !== 'hole') l.rot = g.rot + (a - g.a0)*180/Math.PI;
+      l.x = clampN(g.x + (mxp - g.mx)/g.r.width, 0, 1);
+      l.y = clampN(g.y + (myp - g.my)/g.r.height, 0, 1);
+      E.moved = true;
+    }
+    refreshEl();
+    if (l.type === 'hole'){ dirtyBase(); } else schedule();
+    syncPropsLive(l);
+  }
+  function onUp(e){
+    if (!E.ptrs.has(e.pointerId)) return;
+    E.ptrs.delete(e.pointerId);
+    if (E.ptrs.size === 1 && E.mode === 'pinch'){
+      const p = [...E.ptrs.values()][0]; E.mode = 'drag'; E.g = snapG(); E.g.sx = p.x; E.g.sy = p.y; return;
+    }
+    if (E.ptrs.size === 0){
+      if (E.mode === 'none' && !E.moved && E.sel && !hostHit(e)) { /* ketuk area kosong: lepas pilihan */ selectLayer(null); }
+      else if (E.moved){ pushHist(); }
+      E.mode = null;
+    }
+  }
+  function hostHit(e){ const el = document.elementFromPoint(e.clientX, e.clientY); return !!(el && (host.contains(el) && el !== host)); }
+  window.addEventListener('pointerdown', onDown, true);
+  window.addEventListener('pointermove', onMove, { passive:true });
+  window.addEventListener('pointerup', onUp, true);
+  window.addEventListener('pointercancel', onUp, true);
+  // ketuk di dalam kanvas tapi bukan di layer = lepas pilihan
+  box.addEventListener('pointerdown', (e)=>{
+    if (e.target.closest && (e.target.closest('.ly') || e.target.closest('[data-h]'))) return;
+    if (E.sel) selectLayer(null);
+  });
+
+  /* ---------- riwayat (urungkan / ulangi) ---------- */
+  function snapshot(){
+    return { bg:{...D.bg}, border:{...D.border}, hole:{...D.hole}, layers:D.layers.map(l=>({...l})), sel:E.sel };
+  }
+  function pushHist(){
+    hist = hist.slice(0, histPos + 1); hist.push(snapshot()); if (hist.length > 80) hist.shift(); histPos = hist.length - 1; updUndo();
+  }
+  function restore(s){
+    D.bg = {...s.bg}; D.border = {...s.border}; D.hole = {...s.hole}; D.layers = s.layers.map(l=>({...l}));
+    D.layers.forEach(l=>{ if (l.src) loadImg(l.src).then(()=>schedule()).catch(()=>{}); });
+    E.sel = D.layers.some(l=>l.id === s.sel) ? s.sel : null; SEL = E.sel;
+    syncControls(); renderHost(); refreshProps(); renderLayerList(); dirtyBase();
+  }
+  function updUndo(){ $('#dz-undo').disabled = histPos <= 0; $('#dz-redo').disabled = histPos >= hist.length - 1; }
+  function undo(){ if (histPos <= 0) return; histPos--; restore(hist[histPos]); updUndo(); }
+  function redo(){ if (histPos >= hist.length - 1) return; histPos++; restore(hist[histPos]); updUndo(); }
+
+  /* ---------- operasi layer ---------- */
+  function normalize(){ D.layers.sort((a, b)=> (a.type === 'hole' ? 0 : 1) - (b.type === 'hole' ? 0 : 1)); }   // lubang selalu paling bawah (urutan sebelumnya tetap)
+  function removeSelected(){
+    const l = findL(E.sel); if (!l || l.type === 'hole') return;
+    D.layers = D.layers.filter(x=>x.id !== l.id); E.sel = null; SEL = null;
+    renderHost(); refreshProps(); renderLayerList(); schedule(); pushHist();
+  }
+  async function addImageLayer(src, extra){
+    const img = await loadImg(src);
+    const ar = (img.naturalHeight || img.height) / (img.naturalWidth || img.width) || 1;
+    const l = Object.assign({ id:uid('s'), type:'img', src, ar, x:0.5, y:0.5, w: Math.min(0.34, 0.34/Math.max(0.7, ar)), rot:0, flip:false, op:1 }, extra || {});
+    D.layers.push(l); normalize(); renderHost(); selectLayer(l.id); schedule(); pushHist();
+    return l;
+  }
+  function moveLayer(dir){
+    const i = D.layers.findIndex(l=>l.id === E.sel); if (i < 0 || D.layers[i].type === 'hole') return;
+    const j = i + dir; if (j < 0 || j >= D.layers.length || D.layers[j].type === 'hole') return;
+    const t = D.layers[i]; D.layers[i] = D.layers[j]; D.layers[j] = t;
+    renderHost(); renderLayerList(); schedule(); pushHist();
+  }
+  function dupLayer(){
+    const l = findL(E.sel); if (!l || l.type === 'hole') return;
+    const c = { ...l, id:uid('s'), x: clampN(l.x + 0.04, 0, 1), y: clampN(l.y + 0.03, 0, 1) };
+    D.layers.push(c); normalize(); renderHost(); selectLayer(c.id); schedule(); pushHist();
+  }
+  function flipLayer(){ const l = findL(E.sel); if (!l || l.type === 'hole') return; l.flip = !l.flip; schedule(); pushHist(); }
+  function centerLayer(){ const l = findL(E.sel); if (!l) return; l.x = 0.5; l.y = 0.5; refreshEl(); if (l.type === 'hole') dirtyBase(); else schedule(); pushHist(); }
+
+  /* ---------- panel properti & daftar layer ---------- */
+  function layerName(l, i){
+    if (l.type === 'hole') return 'Lubang foto ' + (holes().indexOf(l) + 1);
+    if (l.type === 'text') return 'Teks: ' + (l.text.t || '').split('\n')[0].slice(0, 22);
+    if (l.shape) return 'Bentuk ' + (SHAPES.find(s=>s.id === l.shape.id) || {name:''}).name;
+    return 'Stiker ' + (i + 1);
+  }
+  function thumbOf(l){
+    if (l.type === 'hole') return 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="6" y="6" width="28" height="28" rx="5" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="5 4"/></svg>');
+    return l.src;
+  }
+  function renderLayerList(){
+    const box2 = $('#dz-layers'); box2.innerHTML = '';
+    const arr = D.layers.slice().reverse();
+    if (!arr.length){ box2.innerHTML = '<p class="muted">Belum ada layer.</p>'; return; }
+    arr.forEach((l, idx)=>{
+      const row = document.createElement('div'); row.className = 'dz-lay' + (l.id === E.sel ? ' on' : '');
+      const im = document.createElement('img'); im.src = thumbOf(l); im.alt = '';
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = layerName(l, D.layers.length - 1 - idx);
+      row.appendChild(im); row.appendChild(nm);
+      row.addEventListener('click', ()=> selectLayer(l.id));
+      box2.appendChild(row);
+    });
+  }
+  function refreshProps(){
+    const l = findL(E.sel), p = $('#dz-props');
+    p.hidden = !l; if (!l){ $('#dz-applytext').disabled = true; return; }
+    const isHole = l.type === 'hole';
+    ['dz-op','dz-rt'].forEach(id=>{ $('#' + id).parentElement.classList.toggle('dz-hide', isHole); });
+    ['dz-up','dz-down','dup','dz-flip','dz-del'].forEach(id=>{ const b = $('#' + (id === 'dup' ? 'dz-dup' : id)); if (b) b.classList.toggle('dz-hide', isHole); });
+    $('#dz-recw').classList.toggle('dz-hide', !(l.shape));
+    $('#dz-op').value = Math.round((l.op == null ? 1 : l.op)*100); $('#dz-opv').textContent = $('#dz-op').value;
+    $('#dz-sz').value = Math.round(l.w*100); $('#dz-szv').textContent = $('#dz-sz').value;
+    const rt = Math.round(l.rot || 0); $('#dz-rt').value = rt; $('#dz-rtv').textContent = rt;
+    if (l.shape) $('#dz-rec').value = l.shape.color;
+    $('#dz-applytext').disabled = l.type !== 'text';
+    if (l.type === 'text'){
+      $('#dz-text').value = l.text.t; $('#dz-font').value = l.text.font; $('#dz-tc').value = l.text.c; $('#dz-tb').checked = !!l.text.b; $('#dz-to').checked = !!l.text.o;
+    }
+  }
+  function syncPropsLive(l){
+    if (!l) return;
+    $('#dz-sz').value = Math.round(l.w*100); $('#dz-szv').textContent = $('#dz-sz').value;
+    const rt = Math.round(l.rot || 0); $('#dz-rt').value = rt; $('#dz-rtv').textContent = rt;
+  }
+  $('#dz-op').addEventListener('input', ()=>{ const l = findL(E.sel); if (!l) return; l.op = Number($('#dz-op').value)/100; $('#dz-opv').textContent = $('#dz-op').value; schedule(); });
+  $('#dz-sz').addEventListener('input', ()=>{ const l = findL(E.sel); if (!l) return; const [mn, mx] = limitsOf(l); l.w = clampN(Number($('#dz-sz').value)/100, mn, mx); $('#dz-szv').textContent = $('#dz-sz').value; refreshEl(); if (l.type === 'hole') dirtyBase(); else schedule(); });
+  $('#dz-rt').addEventListener('input', ()=>{ const l = findL(E.sel); if (!l || l.type === 'hole') return; l.rot = Number($('#dz-rt').value); $('#dz-rtv').textContent = $('#dz-rt').value; refreshEl(); schedule(); });
+  ['dz-op','dz-sz','dz-rt'].forEach(id=>$('#' + id).addEventListener('change', pushHist));
+  $('#dz-rec').addEventListener('input', async ()=>{
+    const l = findL(E.sel); if (!l || !l.shape) return; l.shape.color = $('#dz-rec').value; l.src = shapeSrc(l.shape.id, l.shape.color); await loadImg(l.src); schedule();
+  });
+  $('#dz-rec').addEventListener('change', pushHist);
+  $('#dz-up').addEventListener('click', ()=>moveLayer(1));
+  $('#dz-down').addEventListener('click', ()=>moveLayer(-1));
+  $('#dz-dup').addEventListener('click', dupLayer);
+  $('#dz-flip').addEventListener('click', flipLayer);
+  $('#dz-center').addEventListener('click', centerLayer);
+  $('#dz-del').addEventListener('click', removeSelected);
+
+  /* ---------- pengaturan latar ---------- */
+  function syncControls(){
+    $('#dz-bgtype').value = D.bg.type; $('#dz-c1').value = D.bg.c1; $('#dz-c2').value = D.bg.c2;
+    $('#dz-ang').value = D.bg.ang; $('#dz-angv').textContent = D.bg.ang;
+    $('#dz-pat').value = D.bg.pat; $('#dz-pc').value = D.bg.pc;
+    $('#dz-ps').value = D.bg.ps; $('#dz-psv').textContent = D.bg.ps; $('#dz-pa').value = D.bg.pa; $('#dz-pav').textContent = D.bg.pa;
+    $('#dz-bw').value = D.border.w; $('#dz-bwv').textContent = D.border.w; $('#dz-bc').value = D.border.c;
+    $('#dz-br').value = D.border.r; $('#dz-brv').textContent = D.border.r;
+    $('#dz-hr').value = D.hole.r; $('#dz-hrv').textContent = D.hole.r; $('#dz-hw').value = D.hole.sw; $('#dz-hwv').textContent = D.hole.sw; $('#dz-hc').value = D.hole.sc;
+    showBgFields();
+  }
+  function showBgFields(){
+    const t = D.bg.type;
+    $('#dz-c2w').classList.toggle('dz-hide', t !== 'grad'); $('#dz-angw').classList.toggle('dz-hide', t !== 'grad');
+    ['dz-patw','dz-pcw','dz-psw','dz-paw'].forEach(id=>$('#' + id).classList.toggle('dz-hide', t !== 'pattern'));
+  }
+  const bind = (id, fn, evt)=>{ $('#' + id).addEventListener(evt || 'input', ()=>{ fn(); showBgFields(); dirtyBase(); }); $('#' + id).addEventListener('change', pushHist); };
+  bind('dz-bgtype', ()=>{ D.bg.type = $('#dz-bgtype').value; });
+  bind('dz-c1', ()=>{ D.bg.c1 = $('#dz-c1').value; });
+  bind('dz-c2', ()=>{ D.bg.c2 = $('#dz-c2').value; });
+  bind('dz-ang', ()=>{ D.bg.ang = Number($('#dz-ang').value); $('#dz-angv').textContent = D.bg.ang; });
+  bind('dz-pat', ()=>{ D.bg.pat = $('#dz-pat').value; });
+  bind('dz-pc', ()=>{ D.bg.pc = $('#dz-pc').value; });
+  bind('dz-ps', ()=>{ D.bg.ps = Number($('#dz-ps').value); $('#dz-psv').textContent = D.bg.ps; });
+  bind('dz-pa', ()=>{ D.bg.pa = Number($('#dz-pa').value); $('#dz-pav').textContent = D.bg.pa; });
+  bind('dz-bw', ()=>{ D.border.w = Number($('#dz-bw').value); $('#dz-bwv').textContent = D.border.w; });
+  bind('dz-bc', ()=>{ D.border.c = $('#dz-bc').value; });
+  bind('dz-br', ()=>{ D.border.r = Number($('#dz-br').value); $('#dz-brv').textContent = D.border.r; });
+  bind('dz-hr', ()=>{ D.hole.r = Number($('#dz-hr').value); $('#dz-hrv').textContent = D.hole.r; });
+  bind('dz-hw', ()=>{ D.hole.sw = Number($('#dz-hw').value); $('#dz-hwv').textContent = D.hole.sw; });
+  bind('dz-hc', ()=>{ D.hole.sc = $('#dz-hc').value; });
+
+  /* ---------- tab ---------- */
+  $('#dz-tabs').addEventListener('click', (e)=>{
+    const b = e.target.closest('button[data-t]'); if (!b) return;
+    document.querySelectorAll('#dz-tabs button').forEach(x=>x.classList.toggle('on', x === b));
+    document.querySelectorAll('.dz-panel').forEach(p=>{ p.hidden = p.dataset.p !== b.dataset.t; });
+    if (b.dataset.t === 'lay') renderLayerList();
+  });
+  $('#dz-holes-toggle').addEventListener('click', ()=>{
+    D.holeEdit = !D.holeEdit; host.classList.toggle('holes', D.holeEdit);
+    $('#dz-holes-toggle').textContent = D.holeEdit ? 'Selesai atur lubang' : 'Atur lubang foto';
+    $('#dz-holes-toggle').classList.toggle('pink', D.holeEdit);
+    $('#dz-hint').textContent = D.holeEdit ? 'Mode lubang foto: geser kotak lubang untuk memindahkan, tarik pegangan kanan-bawah untuk mengubah ukuran (bentuk foto tetap).' : 'Ketuk stiker untuk memilih. 1 jari: geser. 2 jari: perbesar dan putar. Pegangan kanan-bawah: ukuran. Pegangan bulat bawah: putar. Pegangan kiri-atas: hapus.';
+    if (!D.holeEdit && findL(E.sel) && findL(E.sel).type === 'hole') selectLayer(null);
+  });
+  $('#dz-sample').addEventListener('change', ()=>{ D.sample = $('#dz-sample').checked; underDirty = true; schedule(); });
+
+  /* ---------- stiker: unggah, bentuk, bawaan ---------- */
+  let idbp = null;
+  function idb(){
+    if (idbp) return idbp;
+    idbp = new Promise((res, rej)=>{
+      if (!window.indexedDB) return rej(new Error('no idb'));
+      const rq = indexedDB.open('snapin-admin', 1);
+      rq.onupgradeneeded = ()=>{ rq.result.createObjectStore('stk', { keyPath:'id' }); };
+      rq.onsuccess = ()=>res(rq.result); rq.onerror = ()=>rej(rq.error);
+    });
+    return idbp;
+  }
+  async function idbAll(){ try{ const db = await idb(); return await new Promise(r=>{ const q = db.transaction('stk').objectStore('stk').getAll(); q.onsuccess = ()=>r(q.result || []); q.onerror = ()=>r([]); }); }catch(e){ return []; } }
+  async function idbPut(o){ try{ const db = await idb(); await new Promise(r=>{ const t = db.transaction('stk', 'readwrite'); t.objectStore('stk').put(o); t.oncomplete = r; t.onerror = r; }); }catch(e){} }
+  async function idbDel(id){ try{ const db = await idb(); await new Promise(r=>{ const t = db.transaction('stk', 'readwrite'); t.objectStore('stk').delete(id); t.oncomplete = r; t.onerror = r; }); }catch(e){} }
+
+  function renderMine(){
+    const g = $('#dz-mine'); g.innerHTML = '';
+    if (!mine.length){ g.innerHTML = '<span class="muted">Belum ada.</span>'; return; }
+    mine.forEach(m=>{
+      const it = document.createElement('div'); it.className = 'it';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.innerHTML = '<img alt="">'; b.firstChild.src = m.src;
+      b.addEventListener('click', ()=> addImageLayer(m.src));
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'rm'; x.textContent = 'x'; x.setAttribute('aria-label', 'Hapus dari daftar');
+      x.addEventListener('click', async ()=>{ mine = mine.filter(y=>y.id !== m.id); await idbDel(m.id); renderMine(); });
+      it.appendChild(b); it.appendChild(x); g.appendChild(it);
+    });
+  }
+  function renderShapes(){
+    const g = $('#dz-shapes'); g.innerHTML = '';
+    const col = $('#dz-shapec').value;
+    SHAPES.forEach(s=>{
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.title = s.name; b.innerHTML = '<img alt="">'; b.firstChild.src = shapeSrc(s.id, col);
+      b.addEventListener('click', ()=> addImageLayer(shapeSrc(s.id, $('#dz-shapec').value), { shape:{ id:s.id, color:$('#dz-shapec').value } }));
+      g.appendChild(b);
+    });
+  }
+  $('#dz-shapec').addEventListener('input', renderShapes);
+  function renderBuiltin(){
+    const g = $('#dz-builtin'); g.innerHTML = '';
+    BUILTIN.forEach(s=>{
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.innerHTML = '<img alt="">'; b.firstChild.src = s.src;
+      b.addEventListener('click', ()=> addImageLayer(s.src)); g.appendChild(b);
+    });
+  }
+  function readFile(f){ return new Promise((res, rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(f); }); }
+  async function normalizeUpload(f){
+    const raw = await readFile(f);
+    if (f.type === 'image/svg+xml') return raw;
+    const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload = ()=>res(i); i.onerror = ()=>rej(new Error('Gambar tidak bisa dibaca')); i.src = raw; });
+    const mx = 1200, sc = Math.min(1, mx / Math.max(img.naturalWidth, img.naturalHeight));
+    if (sc === 1 && raw.length < 1500000) return raw;
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.naturalWidth*sc)); c.height = Math.max(1, Math.round(img.naturalHeight*sc));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return f.type === 'image/jpeg' ? c.toDataURL('image/jpeg', 0.9) : c.toDataURL('image/png');
+  }
+  $('#dz-upload').addEventListener('click', ()=> $('#dz-file').click());
+  $('#dz-file').addEventListener('change', async (e)=>{
+    const files = Array.from(e.target.files || []); e.target.value = '';
+    for (const f of files){
+      try{
+        const src = await normalizeUpload(f);
+        const rec = { id:uid('m'), src };
+        mine.unshift(rec); mine = mine.slice(0, 60); await idbPut(rec);
+        await addImageLayer(src);
+      }catch(err){ SN.toast(err.message || 'Stiker gagal dimuat'); }
+    }
+    renderMine();
+  });
+
+  /* ---------- teks ---------- */
+  function makeTextImage(t){
+    const size = 200, pad = 36, lines = (t.t || ' ').split('\n').slice(0, 4);
+    const c = document.createElement('canvas'), x = c.getContext('2d');
+    const font = (t.b ? 'bold ' : '') + size + 'px ' + t.font;
+    x.font = font;
+    const wd = Math.max(...lines.map(s=>x.measureText(s).width), size*0.5);
+    const lh = size*1.2;
+    c.width = Math.ceil(wd + pad*2); c.height = Math.ceil(lh*lines.length + pad*2 - size*0.1);
+    const y = c.getContext('2d'); y.font = font; y.textAlign = 'center'; y.textBaseline = 'middle'; y.lineJoin = 'round';
+    lines.forEach((s, i)=>{
+      const cx = c.width/2, cy = pad + lh*i + lh/2 - size*0.05;
+      if (t.o){ y.strokeStyle = '#ffffff'; y.lineWidth = size*0.16; y.strokeText(s, cx, cy); }
+      y.fillStyle = t.c; y.fillText(s, cx, cy);
+    });
+    return { src:c.toDataURL('image/png'), ar:c.height/c.width, px:c.width };
+  }
+  function textFromForm(){ return { t:$('#dz-text').value.replace(/\s+$/, '') || 'Teks', font:$('#dz-font').value, c:$('#dz-tc').value, b:$('#dz-tb').checked, o:$('#dz-to').checked }; }
+  $('#dz-addtext').addEventListener('click', async ()=>{
+    const t = textFromForm(), m = makeTextImage(t);
+    await addImageLayer(m.src, { type:'text', text:t, w: clampN(m.px / 1600, 0.12, 0.8) });
+  });
+  $('#dz-applytext').addEventListener('click', async ()=>{
+    const l = findL(E.sel); if (!l || l.type !== 'text') return;
+    const t = textFromForm(), m = makeTextImage(t);
+    const oldPx = l.w * D.W, oldH = oldPx * l.ar;
+    await loadImg(m.src);
+    l.text = t; l.src = m.src;
+    // pertahankan tinggi teks kira-kira sama, lebar menyesuaikan
+    const newW = clampN((oldH / m.ar) / D.W, 0.05, 1.2); l.w = newW; l.ar = m.ar;
+    renderHost(); syncUI(); refreshProps(); renderLayerList(); schedule(); pushHist();
+  });
+
+  /* ---------- mulai desain & susun lubang ---------- */
+  function sizeFromForm(){
+    const v = $('#dz-size').value;
+    if (v === 'custom') return [clampN(Math.round(Number($('#dz-cw').value) || 1200), 300, 4000), clampN(Math.round(Number($('#dz-ch').value) || 1800), 300, 4000)];
+    const p = v.split('x').map(Number); return [p[0], p[1]];
+  }
+  function arrangeHoles(){
+    const n = D.kind === 'video' ? 1 : Number($('#dz-count').value);
+    const cols = Math.min(Number($('#dz-cols').value), n);
+    const ratio = Number($('#dz-shape').value);          // lebar / tinggi foto
+    const mx = D.W*0.08, mt = D.H*0.05, mb = D.H*0.12, gap = Math.round(Math.min(D.W, D.H)*0.025);
+    const rows = Math.ceil(n/cols);
+    const availW = D.W - 2*mx - gap*(cols-1), availH = D.H - mt - mb - gap*(rows-1);
+    let cw = availW/cols, ch = availH/rows;
+    if (cw/ch > ratio) cw = ch*ratio; else ch = cw/ratio;
+    const totalH = ch*rows + gap*(rows-1);
+    const y0 = mt + (availH + gap*(rows-1) - totalH)/2;
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const r = Math.floor(i/cols), c = i % cols;
+      const inRow = (r === rows-1) ? (n - r*cols) : cols;
+      const rowW = cw*inRow + gap*(inRow-1);
+      const x = (D.W - rowW)/2 + c*(cw+gap), y = y0 + r*(ch+gap);
+      out.push({ id:uid('h'), type:'hole', src:'', ar:ch/cw, x:(x + cw/2)/D.W, y:(y + ch/2)/D.H, w:cw/D.W, rot:0, flip:false, op:1 });
+    }
+    return out;
+  }
+  function startDesign(keepStickers){
+    const [w, h] = sizeFromForm(); D.W = w; D.H = h; D.kind = $('#dz-kind').value;
+    const keep = keepStickers ? D.layers.filter(l=>l.type !== 'hole') : [];
+    D.layers = arrangeHoles().concat(keep);
+    E.sel = null; SEL = null; started = true;
+    $('#dz-editor').hidden = false;
+    $('#dz-start').textContent = 'Susun ulang lubang foto / ukuran';
+    syncControls(); layoutStage(); renderHost(); refreshProps(); renderLayerList(); dirtyBase();
+    if (!keepStickers){ hist = []; histPos = -1; }
+    pushHist();
+  }
+  $('#dz-start').addEventListener('click', ()=>{
+    if (started && D.layers.some(l=>l.type !== 'hole')){
+      const keep = confirm('Pertahankan stiker dan teks yang sudah ada? OK = pertahankan (hanya lubang foto disusun ulang), Batal = mulai dari kosong.');
+      startDesign(keep);
+    } else startDesign(false);
+  });
+  $('#dz-size').addEventListener('change', ()=>{ $('#dz-custom').hidden = $('#dz-size').value !== 'custom'; });
+  // saran ukuran kanvas mengikuti jumlah foto dan susunan
+  function suggestSize(){
+    if ($('#dz-kind').value === 'video' || $('#dz-size').value === 'custom') return;
+    const n = Number($('#dz-count').value), cols = Number($('#dz-cols').value);
+    $('#dz-size').value = (cols === 1 && n >= 3) ? '1200x3600' : '1200x1800';
+  }
+  $('#dz-count').addEventListener('change', suggestSize); $('#dz-cols').addEventListener('change', suggestSize);
+  $('#dz-kind').addEventListener('change', ()=>{
+    const v = $('#dz-kind').value === 'video';
+    $('#dz-count').disabled = v; if (v){ $('#dz-count').value = '1'; $('#dz-cols').value = '1'; $('#dz-size').value = '1080x1920'; $('#dz-shape').value = '0.5625'; }
+  });
+  window.addEventListener('resize', ()=>{ if (started) layoutStage(); });
+  $('#dz-undo').addEventListener('click', undo);
+  $('#dz-redo').addEventListener('click', redo);
+
+  // papan ketik (komputer)
+  document.addEventListener('keydown', (e)=>{
+    if (!started || $('#dz-editor').hidden) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+    const l = findL(E.sel);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y'){ e.preventDefault(); redo(); return; }
+    if (!l) return;
+    if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); removeSelected(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd'){ e.preventDefault(); dupLayer(); return; }
+    const st = e.shiftKey ? 0.01 : 0.002;
+    const mv = { ArrowLeft:[-st, 0], ArrowRight:[st, 0], ArrowUp:[0, -st], ArrowDown:[0, st] }[e.key];
+    if (mv){ e.preventDefault(); l.x = clampN(l.x + mv[0], 0, 1); l.y = clampN(l.y + mv[1], 0, 1); refreshEl(); l.type === 'hole' ? dirtyBase() : schedule(); pushHist(); }
+  });
+
+  /* ---------- simpan & unduh ---------- */
+  function exportCanvas(){
+    const c = document.createElement('canvas'); c.width = D.W; c.height = D.H;
+    const ctx = c.getContext('2d'); renderBase(ctx, 1); renderLayers(ctx, 1, false);
+    return c;
+  }
+  async function ensureImages(){ await Promise.all(D.layers.filter(l=>l.src).map(l=>loadImg(l.src).catch(()=>null))); }
+  $('#dz-png').addEventListener('click', async ()=>{
+    if (!started) return; await ensureImages();
+    const a = document.createElement('a'); a.download = (($('#dz-label').value || 'bingkai').trim() || 'bingkai') + '.png'; a.href = exportCanvas().toDataURL('image/png'); a.click();
+  });
+  $('#dz-save').addEventListener('click', async ()=>{
+    const msg = $('#dz-msg'), btn = $('#dz-save');
+    if (!started) return;
+    try{
+      const hs = holes();
+      if (!hs.length) throw new Error('Bingkai harus punya minimal 1 lubang foto.');
+      if (D.kind === 'video' && hs.length !== 1) throw new Error('Bingkai video harus tepat 1 lubang foto.');
+      btn.disabled = true; SN.setMsg(msg, 'Menyiapkan gambar...');
+      await ensureImages();
+      const c = exportCanvas();
+      let dataURL = c.toDataURL('image/webp', 0.97);
+      if (!/^data:image\/webp/.test(dataURL)) throw new Error('Browser ini tidak bisa membuat WebP. Gunakan Chrome.');
+      const areas = hs.map(l=>{ const r = holeRect(l); const x = clampN(Math.round(r.x), 0, D.W-1), y = clampN(Math.round(r.y), 0, D.H-1); return { x, y, width: Math.max(1, Math.min(D.W - x, Math.round(r.w))), height: Math.max(1, Math.min(D.H - y, Math.round(r.h))) }; });
+      // urutan foto: atas ke bawah, kiri ke kanan
+      areas.sort((a, b)=> (Math.abs(a.y - b.y) > Math.min(a.height, b.height)*0.5) ? a.y - b.y : a.x - b.x);
+      const fit = await SN.fitSize({ dataURL, width:D.W, height:D.H, areas }, 3200000);
+      const preview = await SN.makePreview(fit.dataURL, fit.width, fit.height);
+      SN.setMsg(msg, 'Menyimpan...');
+      await SN.api('save', 'POST', {
+        label: ($('#dz-label').value || '').trim() || 'Bingkai desain',
+        canvasWidth: fit.width, canvasHeight: fit.height, photoAreas: fit.areas, image: fit.dataURL, preview,
+        animated:false, ratio: SN.guessRatio(fit.areas), kind: D.kind, theme: $('#dz-theme').value,
+        isPremium: $('#dz-premium').checked, priceIdr: $('#dz-price').value
+      });
+      SN.setMsg(msg, 'Berhasil disimpan. Bingkai akan tampil di aplikasi dalam sekitar 1 menit.', 'ok');
+      SN.toast('Bingkai desain tersimpan');
+      await SN.refreshList();
+    }catch(e){
+      SN.setMsg(msg, e.message || 'Gagal menyimpan', 'err');
+    }finally{ btn.disabled = false; }
+  });
+
+  /* ---------- awal ---------- */
+  renderShapes(); renderBuiltin();
+  idbAll().then(rows=>{ mine = rows.sort((a, b)=> (b.id > a.id ? 1 : -1)).slice(0, 60); mine.forEach(m=>loadImg(m.src).catch(()=>{})); renderMine(); });
+  renderMine();
+  window.__DZ = { D, E, startDesign, addImageLayer, holes, findL, exportCanvas, undo, redo, get hist(){ return hist; } };
+})();
+
 </script>
 </body>
 </html>

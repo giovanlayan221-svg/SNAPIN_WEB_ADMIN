@@ -21,6 +21,9 @@ export default async function handler(req, res) {
         kind: f.kind || 'photo',      // photo | video
         theme: f.theme || '',
         animated: !!f.animated,
+        mediaType: f.mediaType === 'video' ? 'video' : 'image',   // image | video
+        duration: f.duration || 0,
+        holeRadius: f.holeRadius || 0,
         rev: f.createdAt || 0,
         frameImageUrl: base + '/api/img?id=' + encodeURIComponent(f.id),
         previewUrl: base + '/api/img?preview=1&id=' + encodeURIComponent(f.id),

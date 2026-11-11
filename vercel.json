@@ -4,6 +4,8 @@
   ],
   "functions": {
     "api/qris.js": { "maxDuration": 30 },
+    "api/admin.js": { "maxDuration": 60 },
+    "api/img.js": { "maxDuration": 30 },
     "api/qris-callback.js": { "maxDuration": 20 }
   },
   "headers": [
