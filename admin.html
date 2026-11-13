@@ -57,6 +57,11 @@
   .mrow small{ display:block; font-size:10px; color:var(--muted); margin-bottom:2px; }
   .mrow button{ padding:8px 10px; font-size:12px; }
   .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .pbar{ height:12px; border-radius:99px; background:#f0e4ea; overflow:hidden; margin-top:10px; }
+  .pbar i{ display:block; height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg,#f76a9e,#ff9ec4); transition:width .25s; }
+  .pbar.ind i{ width:40% !important; animation:pind 1.1s ease-in-out infinite alternate; }
+  @keyframes pind{ from{ margin-left:0; } to{ margin-left:60%; } }
+  .ptext{ font-size:13px; color:var(--muted); margin-top:6px; font-weight:600; }
   #v-prev{ width:100%; max-height:260px; border-radius:12px; background:#000; margin-top:12px; }
   /* ===== editor desain bingkai ===== */
   textarea{ width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; font:inherit; font-size:15px; background:#fff; color:var(--ink); resize:vertical; }
@@ -114,7 +119,7 @@
       <h2>Tambah bingkai</h2>
       <p class="muted">Unggah PNG, WebP, atau GIF (animasi didukung) dari Canva, atau video MP4 / WebM sebagai bingkai bergerak (disarankan sekitar 10 detik; di aplikasi akan diulang otomatis sampai video pengguna selesai). Lubang foto dikenali otomatis dari bagian transparan atau warna polos hijau, magenta, cyan, atau kuning. Maksimal 6 lubang. Bingkai tampil di aplikasi saat jumlah foto yang dipilih sama dengan jumlah lubangnya. Mendukung strip 1 sampai 6 foto; jika deteksi otomatis tidak sesuai, gunakan pengaturan lubang manual di bawah pratinjau.</p>
       <label for="file">File bingkai</label>
-      <input type="file" id="file" accept="image/png,image/webp,image/gif,video/mp4,video/webm">
+      <input type="file" id="file" accept="image/*,video/*">
       <label for="label">Nama bingkai</label>
       <input type="text" id="label" maxlength="60" placeholder="Contoh: Pink Strip 4 Foto">
       <div class="grid2">
@@ -149,6 +154,7 @@
           <div><label for="hole-r">Sudut lubang membulat (px)</label><input type="number" id="hole-r" value="0" min="0" max="2000" step="1"></div>
           <div class="muted" id="v-info" style="align-self:end;padding-bottom:12px"></div>
         </div>
+        <label class="chk"><input type="checkbox" id="v-opt" checked> Optimalkan video untuk aplikasi (disarankan): 30 fps tetap, keyframe tiap 1 detik, tanpa suara, ukuran kecil, supaya putarannya mulus seperti bingkai foto</label>
         <p class="muted" style="margin:6px 0 0">Lubang foto dikenali dari warna polos (hijau, magenta, cyan, kuning) atau bagian transparan pada frame video. Video MP4 tidak mendukung transparan, jadi beri warna polos pada area lubang. Jika berkas lebih dari sekitar 4 MB, ukurannya dikecilkan otomatis di browser ini.</p>
       </div>
       <div id="preview-wrap" hidden><canvas id="preview"></canvas></div>
@@ -181,6 +187,8 @@
         <button class="btn pink" id="btn-save" disabled>Simpan bingkai</button>
       </div>
       <div class="msg" id="save-msg"></div>
+      <div class="pbar" id="pbar" hidden><i id="pbar-i"></i></div>
+      <div class="ptext" id="ptext" hidden></div>
     </section>
 
     <section class="card" id="dz-card">
@@ -253,7 +261,7 @@
 
         <div class="dz-panel" data-p="stk" hidden>
           <div class="row"><button class="btn pink" id="dz-upload" type="button">Unggah stiker sendiri</button></div>
-          <input type="file" id="dz-file" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml" multiple hidden>
+          <input type="file" id="dz-file" accept="image/*" multiple hidden>
           <p class="muted" style="margin:6px 0 0">PNG transparan paling bagus. Stiker yang diunggah muncul di daftar di bawah dan bisa dipakai berulang kali.</p>
           <label>Stiker saya</label><div class="dz-grid" id="dz-mine"><span class="muted">Belum ada.</span></div>
           <label>Bentuk dan hiasan (warna mengikuti pilihan ini)</label>
@@ -384,6 +392,346 @@
 </main>
 <div id="toast"></div>
 
+<script>
+/* ============================================================
+   ENGINE RENDER VIDEO (WebCodecs + muxer sendiri)
+   - Frame diberi cap waktu dari video sumber (mediaTime), bukan jam dinding, jadi tidak ada frame hilang / durasi meleset
+   - Video dijeda otomatis kalau encoder tertinggal (backpressure)
+   - Audio didekode lalu di-encode terpisah, sinkron per sampel
+   - Hasil: MP4 (H.264 + AAC) bila didukung, kalau tidak WebM (VP8 + Opus). Header lengkap (durasi, indeks).
+   ============================================================ */
+const SNV = (function(){
+  const U8 = Uint8Array;
+  const cat = (parts)=>{ let n = 0; for (const p of parts) n += p.length; const o = new U8(n); let k = 0; for (const p of parts){ o.set(p, k); k += p.length; } return o; };
+  const u32 = (v)=> new U8([(v>>>24)&255, (v>>>16)&255, (v>>>8)&255, v&255]);
+  const u16 = (v)=> new U8([(v>>>8)&255, v&255]);
+  const str = (s)=> { const a = new U8(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+  const toU8 = (ds)=> ds instanceof ArrayBuffer ? new U8(new U8(ds)) : new U8(new U8(ds.buffer, ds.byteOffset || 0, ds.byteLength));
+  const f64 = (v)=>{ const a = new U8(8); new DataView(a.buffer).setFloat64(0, v); return a; };
+
+  /* ---------------- WebM ---------------- */
+  const eId = (id)=>{ const a = []; let x = id; while (x > 0){ a.unshift(x % 256); x = Math.floor(x/256); } return new U8(a); };
+  const eSize = (n)=>{
+    for (let len = 1; len <= 8; len++){
+      if (n < Math.pow(2, 7*len) - 1){
+        const a = new U8(len); let x = n;
+        for (let i = len - 1; i >= 0; i--){ a[i] = x % 256; x = Math.floor(x/256); }
+        a[0] |= (0x80 >> (len - 1));
+        return a;
+      }
+    }
+    throw new Error('size');
+  };
+  const eEl = (id, body)=> cat([eId(id), eSize(body.length), body]);
+  const eUInt = (id, v)=>{ const a = []; let x = v; do { a.unshift(x % 256); x = Math.floor(x/256); } while (x > 0); return eEl(id, new U8(a)); };
+  const eStr = (id, s)=> eEl(id, str(s));
+  const eF64 = (id, v)=> eEl(id, f64(v));
+
+  function opusHead(channels, rate){
+    const a = new U8(19); a.set(str('OpusHead'), 0); a[8] = 1; a[9] = channels;
+    a[10] = 312 & 255; a[11] = (312 >> 8) & 255;                       // pre-skip
+    a[12] = rate & 255; a[13] = (rate >> 8) & 255; a[14] = (rate >> 16) & 255; a[15] = (rate >>> 24) & 255;
+    a[16] = 0; a[17] = 0; a[18] = 0; return a;
+  }
+
+  /* o: { w,h, vcodec:'V_VP8'|'V_VP9', v:[{t,key,d}], a:[{t,d}]|null, aDesc, sr, ch, durUs } ; t dalam mikrodetik */
+  function buildWebM(o){
+    const durMs = o.durUs / 1000;
+    const header = eEl(0x1A45DFA3, cat([eUInt(0x4286, 1), eUInt(0x42F7, 1), eUInt(0x42F2, 4), eUInt(0x42F3, 8), eStr(0x4282, 'webm'), eUInt(0x4287, 4), eUInt(0x4285, 2)]));
+    const info = eEl(0x1549A966, cat([eUInt(0x2AD7B1, 1000000), eStr(0x4D80, 'snapin'), eStr(0x5741, 'snapin'), eF64(0x4489, durMs)]));
+    const vTrack = eEl(0xAE, cat([eUInt(0xD7, 1), eUInt(0x73C5, 1), eUInt(0x83, 1), eStr(0x86, o.vcodec), eUInt(0x9C, 0), eEl(0xE0, cat([eUInt(0xB0, o.w), eUInt(0xBA, o.h)]))]));
+    const tracks = [vTrack];
+    if (o.a && o.a.length){
+      const priv = o.aDesc && o.aDesc.length ? o.aDesc : opusHead(o.ch, o.sr);
+      tracks.push(eEl(0xAE, cat([eUInt(0xD7, 2), eUInt(0x73C5, 2), eUInt(0x83, 2), eStr(0x86, 'A_OPUS'), eUInt(0x9C, 0), eEl(0x63A2, priv), eEl(0xE1, cat([eF64(0xB5, o.sr), eUInt(0x9F, o.ch)]))])));
+    }
+    const tracksEl = eEl(0x1654AE6B, cat(tracks));
+    // gabung blok video dan audio berdasarkan waktu
+    const blocks = [];
+    o.v.forEach(c=>blocks.push({ ms:Math.round(c.t/1000), tr:1, key:c.key, d:c.d }));
+    (o.a || []).forEach(c=>blocks.push({ ms:Math.round(c.t/1000), tr:2, key:true, d:c.d }));
+    blocks.sort((x, y)=> x.ms - y.ms || x.tr - y.tr);
+    const clusters = []; let cur = null;
+    const flush = ()=>{ if (cur){ cur.bytes = eEl(0x1F43B675, cat([eUInt(0xE7, cur.ms)].concat(cur.parts))); clusters.push(cur); cur = null; } };
+    blocks.forEach(b=>{
+      if (!cur || b.ms - cur.ms >= 2000 || (b.tr === 1 && b.key && b.ms - cur.ms >= 800)){ flush(); cur = { ms:b.ms, parts:[], key:b.tr === 1 && b.key }; }
+      const rel = b.ms - cur.ms;
+      const hdr = new U8([0x80 | b.tr, (rel >> 8) & 255, rel & 255, b.key ? 0x80 : 0]);
+      cur.parts.push(eEl(0xA3, cat([hdr, b.d])));
+    });
+    flush();
+    // Cues: satu titik per cluster
+    let pos = info.length + tracksEl.length;
+    const cuePts = [];
+    clusters.forEach(c=>{
+      cuePts.push(eEl(0xBB, cat([eUInt(0xB3, c.ms), eEl(0xB7, cat([eUInt(0xF7, 1), eUInt(0xF1, pos)]))])));
+      pos += c.bytes.length;
+    });
+    const cues = eEl(0x1C53BB6B, cat(cuePts));
+    const segBody = cat([info, tracksEl].concat(clusters.map(c=>c.bytes), [cues]));
+    return cat([header, eEl(0x18538067, segBody)]);
+  }
+
+  /* ---------------- MP4 ---------------- */
+  const box = (type, ...parts)=>{ const body = cat(parts); return cat([u32(8 + body.length), str(type), body]); };
+  const fullBox = (type, ver, flags, ...parts)=> box(type, new U8([ver, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255]), ...parts);
+  const MATRIX = cat([u32(0x00010000), u32(0), u32(0), u32(0), u32(0x00010000), u32(0), u32(0), u32(0), u32(0x40000000)]);
+  const rle = (arr)=>{ const out = []; arr.forEach(v=>{ const l = out[out.length - 1]; if (l && l[1] === v) l[0]++; else out.push([1, v]); }); return out; };
+
+  /* o: { w,h, v:[{t,dur,key,d}], a:[{t,dur,d}]|null, avcC, aDesc, sr, ch, durUs } ; sampel video sudah berformat AVCC (panjang 4 byte) */
+  function buildMP4(o){
+    const VTS = 90000;
+    const hasA = !!(o.a && o.a.length);
+    const vt = o.v.map(c=> Math.round(c.t * VTS / 1e6));
+    const vDelta = o.v.map((c, i)=> Math.max(1, i + 1 < vt.length ? vt[i+1] - vt[i] : Math.max(1, Math.round((c.dur || 33333) * VTS / 1e6))));
+    const vTotal = vt.length ? (vt[vt.length - 1] + vDelta[vDelta.length - 1]) : 0;
+    let aT = [], aDelta = [], aTotal = 0;
+    if (hasA){
+      aT = o.a.map(c=> Math.round(c.t * o.sr / 1e6));
+      aDelta = o.a.map((c, i)=> Math.max(1, i + 1 < aT.length ? aT[i+1] - aT[i] : 1024));
+      aTotal = aT[aT.length - 1] + aDelta[aDelta.length - 1];
+    }
+    // susun chunk: tiap jendela 1 detik -> chunk video lalu chunk audio
+    const chunks = [];       // { tr, idx0, n }
+    const win = (us)=> Math.floor(us / 1e6);
+    let vi = 0, ai = 0;
+    const vEnd = o.v.length, aEnd = hasA ? o.a.length : 0;
+    while (vi < vEnd || ai < aEnd){
+      const w = Math.min(vi < vEnd ? win(o.v[vi].t) : 1e9, ai < aEnd ? win(o.a[ai].t) : 1e9);
+      let n = 0; while (vi + n < vEnd && win(o.v[vi + n].t) === w) n++;
+      if (n){ chunks.push({ tr:1, i0:vi, n }); vi += n; }
+      n = 0; while (ai + n < aEnd && win(o.a[ai + n].t) === w) n++;
+      if (n){ chunks.push({ tr:2, i0:ai, n }); ai += n; }
+    }
+    const moovFor = (mdatStart)=>{
+      // offset tiap chunk
+      let off = mdatStart; const vOff = [], aOff = [];
+      chunks.forEach(c=>{
+        (c.tr === 1 ? vOff : aOff).push(off);
+        const list = c.tr === 1 ? o.v : o.a; for (let k = 0; k < c.n; k++) off += list[c.i0 + k].d.length;
+      });
+      const vChunks = chunks.filter(c=>c.tr === 1), aChunks = chunks.filter(c=>c.tr === 2);
+      const movDurMs = Math.round(o.durUs / 1000);
+      const mvhd = fullBox('mvhd', 0, 0, u32(0), u32(0), u32(1000), u32(movDurMs), u32(0x00010000), u16(0x0100), new U8(10), MATRIX, new U8(24), u32(hasA ? 3 : 2));
+      const stblCommon = (list, deltas, offs, cks)=>{
+        const stts = fullBox('stts', 0, 0, u32(rle(deltas).length), ...rle(deltas).map(r=>cat([u32(r[0]), u32(r[1])])));
+        const stsz = fullBox('stsz', 0, 0, u32(0), u32(list.length), ...list.map(c=>u32(c.d.length)));
+        const runs = []; cks.forEach((c, idx)=>{ const l = runs[runs.length - 1]; if (l && l[1] === c.n) return; runs.push([idx + 1, c.n]); });
+        const stsc = fullBox('stsc', 0, 0, u32(runs.length), ...runs.map(r=>cat([u32(r[0]), u32(r[1]), u32(1)])));
+        const stco = fullBox('stco', 0, 0, u32(offs.length), ...offs.map(x=>u32(x)));
+        return [stts, stsc, stsz, stco];
+      };
+      // video
+      const avc1 = box('avc1', new U8(6), u16(1), new U8(16), u16(o.w), u16(o.h), u32(0x00480000), u32(0x00480000), u32(0), u16(1), new U8(32), u16(0x0018), u16(0xFFFF), box('avcC', o.avcC));
+      const stssIdx = []; o.v.forEach((c, i)=>{ if (c.key) stssIdx.push(i + 1); });
+      const vStbl = box('stbl', fullBox('stsd', 0, 0, u32(1), avc1), ...stblCommon(o.v, vDelta, vOff, vChunks).slice(0, 1), fullBox('stss', 0, 0, u32(stssIdx.length), ...stssIdx.map(x=>u32(x))), ...stblCommon(o.v, vDelta, vOff, vChunks).slice(1));
+      const vDurMov = Math.round(vTotal * 1000 / VTS);
+      const vTrak = box('trak',
+        fullBox('tkhd', 0, 3, u32(0), u32(0), u32(1), u32(0), u32(vDurMov), new U8(8), u16(0), u16(0), u16(0), u16(0), MATRIX, u32(o.w * 65536), u32(o.h * 65536)),
+        box('mdia', fullBox('mdhd', 0, 0, u32(0), u32(0), u32(VTS), u32(vTotal), u16(0x55C4), u16(0)),
+          fullBox('hdlr', 0, 0, u32(0), str('vide'), new U8(12), str('VideoHandler\0')),
+          box('minf', fullBox('vmhd', 0, 1, new U8(8)), box('dinf', fullBox('dref', 0, 0, u32(1), fullBox('url ', 0, 1))), vStbl)));
+      let aTrak = new U8(0);
+      if (hasA){
+        const asc = o.aDesc;
+        const dsi = cat([new U8([0x05, asc.length]), asc]);
+        const dcd = cat([new U8([0x04, 13 + dsi.length, 0x40, 0x15, 0, 0, 0]), u32(0), u32(0), dsi]);
+        const esd = cat([new U8([0x03, 3 + dcd.length + 3, 0, 2, 0]), dcd, new U8([0x06, 1, 0x02])]);
+        const mp4a = box('mp4a', new U8(6), u16(1), new U8(8), u16(o.ch), u16(16), u16(0), u16(0), u32(o.sr * 65536), fullBox('esds', 0, 0, esd));
+        const aStbl = box('stbl', fullBox('stsd', 0, 0, u32(1), mp4a), ...stblCommon(o.a, aDelta, aOff, aChunks));
+        const aDurMov = Math.round(aTotal * 1000 / o.sr);
+        aTrak = box('trak',
+          fullBox('tkhd', 0, 3, u32(0), u32(0), u32(2), u32(0), u32(aDurMov), new U8(8), u16(0), u16(0), u16(0x0100), u16(0), MATRIX, u32(0), u32(0)),
+          box('mdia', fullBox('mdhd', 0, 0, u32(0), u32(0), u32(o.sr), u32(aTotal), u16(0x55C4), u16(0)),
+            fullBox('hdlr', 0, 0, u32(0), str('soun'), new U8(12), str('SoundHandler\0')),
+            box('minf', fullBox('smhd', 0, 0, u32(0)), box('dinf', fullBox('dref', 0, 0, u32(1), fullBox('url ', 0, 1))), aStbl)));
+      }
+      return box('moov', mvhd, vTrak, aTrak);
+    };
+    const ftyp = box('ftyp', str('isom'), u32(512), str('isom'), str('iso2'), str('avc1'), str('mp41'));
+    let moov = moovFor(0);
+    const mdatStart = ftyp.length + moov.length + 8;       // moov di depan (faststart), mdat 8 byte header
+    moov = moovFor(mdatStart);
+    let total = 0; chunks.forEach(c=>{ const list = c.tr === 1 ? o.v : o.a; for (let k = 0; k < c.n; k++) total += list[c.i0 + k].d.length; });
+    const parts = [ftyp, moov, cat([u32(8 + total), str('mdat')])];
+    chunks.forEach(c=>{ const list = c.tr === 1 ? o.v : o.a; for (let k = 0; k < c.n; k++) parts.push(list[c.i0 + k].d); });
+    return cat(parts);
+  }
+
+  /* ---------------- render ---------------- */
+  async function pickConfig(w, h, hasAudio, vbps, prefer, cbr){
+    const out = [];
+    const mk = async (C, cfg)=>{ try{ const r = await C.isConfigSupported(cfg); return r && r.supported ? (r.config || cfg) : null; }catch(e){ return null; } };
+    const base = Object.assign({ width:w, height:h, bitrate:vbps, framerate:30 }, cbr ? { bitrateMode:'constant' } : {});
+    const sr = 48000, ch = 2;
+    const wantMp4 = prefer !== 'webm', wantWebm = prefer !== 'mp4';
+    if (wantMp4){
+      let vcfg = await mk(VideoEncoder, Object.assign({ codec:'avc1.420028', hardwareAcceleration:'prefer-hardware', avc:{ format:'avc' } }, base));
+      if (!vcfg) vcfg = await mk(VideoEncoder, Object.assign({ codec:'avc1.420028', avc:{ format:'avc' } }, base));
+      let acfg = null;
+      if (hasAudio) acfg = await mk(AudioEncoder, { codec:'mp4a.40.2', sampleRate:sr, numberOfChannels:ch, bitrate:128000 });
+      if (vcfg && (!hasAudio || acfg)) out.push({ ext:'mp4', mime:'video/mp4', vcfg, acfg, vcodec:'avc' });
+    }
+    if (wantWebm){
+      const vcfg = await mk(VideoEncoder, Object.assign({ codec:'vp8' }, base));
+      let acfg = null;
+      if (hasAudio) acfg = await mk(AudioEncoder, { codec:'opus', sampleRate:sr, numberOfChannels:ch, bitrate:96000 });
+      if (vcfg && (!hasAudio || acfg)) out.push({ ext:'webm', mime:'video/webm', vcfg, acfg, vcodec:'V_VP8' });
+    }
+    return out;
+  }
+
+  async function probeAudio(v){
+    try{
+      v.muted = true; v.currentTime = 0; await v.play();
+      await new Promise(r=>setTimeout(r, 500));
+      const n = v.webkitAudioDecodedByteCount; v.pause(); v.currentTime = 0;
+      return typeof n === 'number' ? n > 0 : false;
+    }catch(e){ return false; }
+  }
+
+  async function decodeAudio(url){
+    try{
+      const ab = await (await fetch(url)).arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ac = new AC({ sampleRate:48000 });
+      const buf = await ac.decodeAudioData(ab);
+      try{ ac.close(); }catch(e){}
+      if (!buf || !buf.length) return null;
+      return buf;
+    }catch(e){ return null; }
+  }
+
+  /* o: { canvas, video, draw(t), audioUrl, bitrate, onProgress(p), cancelled(), prefer, forceNoAudio }  -> { blob, ext } */
+  async function render(o){
+    if (!(window.VideoEncoder && window.VideoFrame && typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function')) throw new Error('webcodecs-unavailable');
+    const c = o.canvas, v = o.video;
+    let abuf = (o.forceNoAudio || o.breakDecode) ? null : await decodeAudio(o.audioUrl);
+    // audio gagal didekode padahal videonya punya suara: jangan hasilkan video bisu, biarkan aplikasi memakai jalur cadangan
+    if (!abuf && !o.forceNoAudio && await probeAudio(v)) throw new Error('audio-decode');
+    const hasAudio = !!(abuf && window.AudioEncoder && window.AudioData);
+    const cfgs = await pickConfig(c.width, c.height, hasAudio, o.bitrate, o.prefer, o.cbr);
+    if (!cfgs.length) throw new Error('no-config');
+    let lastErr = null;
+    for (const cfg of cfgs){
+      try{ return await renderWith(o, cfg, hasAudio ? abuf : null); }
+      catch(e){ if (e && e.message === 'cancelled') throw e; lastErr = e; }
+    }
+    throw lastErr || new Error('render-failed');
+  }
+
+  async function renderWith(o, cfg, abuf){
+    const c = o.canvas, v = o.video;
+    const vChunks = []; let avcC = null, encErr = null;
+    const venc = new VideoEncoder({
+      output:(chunk, meta)=>{
+        const d = new U8(chunk.byteLength); chunk.copyTo(d);
+        if (meta && meta.decoderConfig && meta.decoderConfig.description && !avcC) avcC = toU8(meta.decoderConfig.description);
+        vChunks.push({ t:chunk.timestamp, dur:chunk.duration || 33333, key:chunk.type === 'key', d });
+      },
+      error:(e)=>{ encErr = e; }
+    });
+    venc.configure(cfg.vcfg);
+    // ---- video: frame demi frame, dipacu oleh frame video sumber
+    const dur = (isFinite(v.duration) && v.duration > 0) ? v.duration : 1;
+    let n = 0, lastTs = -1;
+    let rate = 1, sinceAdj = 0, lastDrop = -999, fiUs = 33333; const deltas = [];
+    const setRate = (r)=>{ rate = Math.max(0.5, Math.min(1, r)); try{ v.playbackRate = rate; }catch(e){} if (o.onRate) o.onRate(rate); };
+    v.currentTime = 0;
+    await new Promise(res=>{ if (v.readyState >= 2) res(); else { v.onloadeddata = res; setTimeout(res, 4000); } });
+    await new Promise((resolve, reject)=>{
+      let finished = false;
+      const finish = (err)=>{ if (finished) return; finished = true; clearInterval(watch); err ? reject(err) : resolve(); };
+      const onFrame = (now, meta)=>{
+        if (finished) return;
+        if (o.cancelled && o.cancelled()) return finish(new Error('cancelled'));
+        if (encErr) return finish(encErr);
+        const ts = Math.round((meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : v.currentTime) * 1e6);
+        const minGap = o.maxFps ? (1e6 / o.maxFps) * 0.8 : 0;   // batasi fps (mis. video 60 fps -> 30 fps)
+        if (ts > lastTs && (lastTs < 0 || ts - lastTs >= minGap)){
+          const dt = lastTs >= 0 ? ts - lastTs : 0;
+          if (dt > 0 && deltas.length < 12){ deltas.push(dt); if (deltas.length === 12){ const sd = deltas.slice().sort((x, y)=>x - y); fiUs = Math.max(16000, Math.min(66000, sd[5])); } }
+          o.draw(ts / 1e6);
+          const f = new VideoFrame(c, { timestamp:ts, duration:fiUs });
+          try{ venc.encode(f, { keyFrame: n % (o.keyEvery || 60) === 0 }); }catch(e){ f.close(); return finish(e); }
+          f.close(); n++; lastTs = ts;
+          if (o.onProgress && n % 15 === 0) o.onProgress(Math.min(99, Math.round(ts / 1e6 / dur * 100)), n);
+          // pengatur kecepatan (dengan jeda antar penyesuaian supaya tidak berayun): antrean encoder menumpuk / ada frame terlewat -> perlambat; antrean kosong -> percepat lagi
+          sinceAdj++;
+          const q = venc.encodeQueueSize;
+          const dropped = deltas.length >= 12 && dt > fiUs * 1.6;
+          if (dropped){ lastDrop = n; }
+          if (sinceAdj >= 8){
+            if (q >= 8 || dropped){ setRate(rate * 0.85); sinceAdj = 0; }
+            else if (q <= 2 && rate < 1 && n - lastDrop > 45){ setRate(rate * 1.1); sinceAdj = 0; }
+          }
+        }
+        if (!v.ended) v.requestVideoFrameCallback(onFrame);
+      };
+      v.onended = ()=>{ setTimeout(()=>finish(), 80); };
+      const watch = setInterval(()=>{ if (o.cancelled && o.cancelled()) finish(new Error('cancelled')); }, 400);
+      v.requestVideoFrameCallback(onFrame);
+      v.play().catch(err=>finish(err));
+      setTimeout(()=>finish(new Error('timeout')), (dur / 0.5 + 60) * 1000);
+    });
+    try{ v.pause(); }catch(e){}
+    if (encErr) throw encErr;
+    await venc.flush(); try{ venc.close(); }catch(e){}
+    if (encErr) throw encErr;
+    if (!vChunks.length) throw new Error('no-frames');
+    vChunks.sort((a, b)=> a.t - b.t);
+    try{ v.playbackRate = 1; }catch(e){}
+    const lastV = vChunks[vChunks.length - 1];
+    const vidEndUs = lastV.t + lastV.dur;
+
+    // ---- audio: encode seluruh PCM yang sudah didekode, dipotong sesuai panjang video
+    const aChunks = []; let aDesc = null;
+    if (abuf && cfg.acfg){
+      const sr = 48000, chN = 2;
+      const total = Math.min(abuf.length, Math.round(vidEndUs / 1e6 * sr));
+      const src = [abuf.getChannelData(0), abuf.numberOfChannels > 1 ? abuf.getChannelData(1) : abuf.getChannelData(0)];
+      const aenc = new AudioEncoder({
+        output:(chunk, meta)=>{
+          const d = new U8(chunk.byteLength); chunk.copyTo(d);
+          if (meta && meta.decoderConfig && meta.decoderConfig.description && !aDesc) aDesc = toU8(meta.decoderConfig.description);
+          aChunks.push({ t:chunk.timestamp, dur:chunk.duration || 20000, d });
+        },
+        error:(e)=>{ encErr = e; }
+      });
+      aenc.configure(cfg.acfg);
+      const N = 4800;   // 100 ms per blok
+      for (let i = 0; i < total; i += N){
+        if (o.cancelled && o.cancelled()) throw new Error('cancelled');
+        const len = Math.min(N, total - i);
+        const data = new Float32Array(len * chN);
+        data.set(src[0].subarray(i, i + len), 0); data.set(src[1].subarray(i, i + len), len);
+        const ad = new AudioData({ format:'f32-planar', sampleRate:sr, numberOfFrames:len, numberOfChannels:chN, timestamp:Math.round(i / sr * 1e6), data });
+        aenc.encode(ad); ad.close();
+        if (aenc.encodeQueueSize > 20) await new Promise(r=>setTimeout(r, 10));
+      }
+      await aenc.flush(); try{ aenc.close(); }catch(e){}
+      if (encErr) throw encErr;
+      aChunks.sort((a, b)=> a.t - b.t);
+    }
+
+    // ---- bungkus ke file
+    const durUs = vidEndUs;
+    let bytes;
+    if (cfg.ext === 'mp4'){
+      if (!avcC) throw new Error('no-avcC');
+      if (aChunks.length && !aDesc) throw new Error('no-asc');
+      bytes = buildMP4({ w:c.width, h:c.height, v:vChunks, a:aChunks.length ? aChunks : null, avcC, aDesc, sr:48000, ch:2, durUs });
+    } else {
+      bytes = buildWebM({ w:c.width, h:c.height, vcodec:cfg.vcodec, v:vChunks, a:aChunks.length ? aChunks : null, aDesc, sr:48000, ch:2, durUs });
+    }
+    return { blob:new Blob([bytes], { type:cfg.mime }), ext:cfg.ext, frames:n, durSec:durUs / 1e6 };
+  }
+
+  return { buildWebM, buildMP4, render, pickConfig };
+})();
+if (typeof module !== 'undefined') module.exports = SNV;
+
+</script>
 <script>
 /* FRAMEDETECT:BEGIN */
 const FrameDetect = (function(){
@@ -748,6 +1096,33 @@ const FrameDetect = (function(){
     clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 2800);
   }
   function setMsg(el, text, cls){ el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  // ===== bar progres =====
+  function setProg(pct, text){
+    const bar = $('#pbar'), tx = $('#ptext');
+    if (pct == null && !text){ bar.hidden = true; tx.hidden = true; bar.classList.remove('ind'); return; }
+    bar.hidden = false; tx.hidden = false;
+    if (pct == null){ bar.classList.add('ind'); } else { bar.classList.remove('ind'); $('#pbar-i').style.width = Math.max(0, Math.min(100, pct)) + '%'; }
+    tx.textContent = text || '';
+  }
+  // kirim JSON dengan XHR supaya ada progres unggah, batas waktu, dan pesan galat yang jelas
+  function apiUpload(action, body, onProgress, timeoutMs){
+    return new Promise((resolve, reject)=>{
+      const x = new XMLHttpRequest();
+      x.open('POST', '/api/admin?action=' + action);
+      x.setRequestHeader('x-admin-password', PW); x.setRequestHeader('Content-Type', 'application/json');
+      x.timeout = timeoutMs || 90000;
+      x.upload.onprogress = (e)=>{ if (onProgress && e.lengthComputable) onProgress(e.loaded, e.total); };
+      x.onload = ()=>{
+        let data = null; try{ data = JSON.parse(x.responseText); }catch(e){}
+        if (x.status >= 200 && x.status < 300) return resolve(data);
+        const err = new Error((data && data.error) || ('Gagal (HTTP ' + x.status + ')')); err.status = x.status; reject(err);
+      };
+      x.onerror = ()=>{ const e = new Error('Koneksi terputus saat mengunggah'); e.status = 0; reject(e); };
+      x.ontimeout = ()=>{ const e = new Error('Unggahan terlalu lama (koneksi lambat)'); e.status = 0; reject(e); };
+      x.send(JSON.stringify(body));
+    });
+  }
 
   async function api(action, method, body){
     const headers = { 'x-admin-password': PW };
@@ -1176,6 +1551,9 @@ const FrameDetect = (function(){
   $('#m-apply').addEventListener('click', applyManual);
   ['m-count','m-cols','m-ratio','m-margin','m-top','m-bottom'].forEach(id=>$('#'+id).addEventListener('change', ()=>{ if (lastRes) autoArrange(); }));
 
+  // jenis berkas: dari tipe MIME, atau dari ekstensi kalau pemilih file HP tidak mengisi tipe
+  const EXT_VIDEO = /\.(mp4|m4v|webm|mov|mkv|3gp|3gpp|avi|ts|mts|wmv|flv)$/i;
+  function isVideoFile(f){ return /^video\//.test(f.type || '') || (!f.type && EXT_VIDEO.test(f.name || '')); }
   // ===== Bingkai video =====
   const MAX_VIDEO = 4200000;
   let videoState = null;      // { blob, type, duration, objectUrl }
@@ -1302,17 +1680,81 @@ const FrameDetect = (function(){
       throw new Error('Video masih terlalu besar setelah dikecilkan. Pendekkan durasinya atau kecilkan resolusinya di Canva.');
     } finally { URL.revokeObjectURL(url); }
   }
+  // Optimalkan video bingkai dengan engine WebCodecs: fps tetap maks 30, keyframe tiap 1 detik, tanpa audio, ukuran terkendali
+  async function optimizeVideo(file, targetBytes, onProgress){
+    if (typeof SNV === 'undefined' || !window.VideoEncoder || typeof HTMLVideoElement.prototype.requestVideoFrameCallback !== 'function') throw new Error('webcodecs-unavailable');
+    const url = URL.createObjectURL(file);
+    try{
+      const v = await videoMeta(url);
+      const dur = v.duration;
+      const sc = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+      const w = Math.max(2, Math.round(v.videoWidth*sc/2)*2), h = Math.max(2, Math.round(v.videoHeight*sc/2)*2);
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d');
+      const bps0 = Math.max(500000, Math.min(5000000, Math.floor(targetBytes * 8 / dur * 0.85)));
+      // rencana bertahap: MP4 dulu; bila hasilnya terlalu besar (encoder tidak menurut bitrate) pindah ke WebM, lalu kecilkan resolusi dan bitrate
+      const plans = [ { prefer:'mp4', k:1, s:1 }, { prefer:'webm', k:1, s:1 }, { prefer:'webm', k:0.7, s:0.85 }, { prefer:'webm', k:0.5, s:0.7 } ];
+      for (let i = 0; i < plans.length; i++){
+        const pl = plans[i];
+        if (pl.prefer === 'mp4' && window.__snapinMp4Overshoot) continue;
+        const vv = (i === 0) ? v : await videoMeta(url);
+        const cw = Math.max(2, Math.round(w * pl.s / 2) * 2), ch = Math.max(2, Math.round(h * pl.s / 2) * 2);
+        const c2 = document.createElement('canvas'); c2.width = cw; c2.height = ch; const x2 = c2.getContext('2d');
+        const res = await SNV.render({
+          canvas:c2, video:vv, draw:()=>{ x2.drawImage(vv, 0, 0, cw, ch); }, audioUrl:'', forceNoAudio:true, prefer:pl.prefer,
+          bitrate:Math.floor(bps0 * pl.k), keyEvery:30, maxFps:30, cancelled:()=>false,
+          onProgress:(p)=>onProgress && onProgress(p, i + 1, plans.length)
+        });
+        if (res.blob.size <= targetBytes + 150000) return res.blob;
+        if (pl.prefer === 'mp4') window.__snapinMp4Overshoot = true;
+      }
+      throw new Error('Video masih terlalu besar setelah dioptimalkan. Pendekkan durasinya atau kecilkan resolusinya.');
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function hasAlpha(file){
+    const url = URL.createObjectURL(file);
+    try{
+      const v = await videoMeta(url);
+      const poster = await grabFrame(v, Math.min(0.2, v.duration/2));
+      const img = await loadImage(poster);
+      const c = document.createElement('canvas'); c.width = Math.min(img.width, 400); c.height = Math.round(c.width*img.height/img.width);
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+      return false;
+    } finally { URL.revokeObjectURL(url); }
+  }
   async function onVideoFile(f){
     setMsg($('#analyze-msg'), 'Membaca video...');
     try{
-      if (!/^video\/(mp4|webm)$/.test(f.type)) throw new Error('Gunakan video MP4 atau WebM.');
-      let blob = f, type = f.type;
+      let blob = f, type = f.type || (/\.webm$/i.test(f.name) ? 'video/webm' : 'video/mp4');
+      const nativeOk = /^video\/(mp4|webm)$/.test(type) && /\.(mp4|webm|m4v)$/i.test(f.name || 'x.mp4');   // format selain MP4/WebM (mov, mkv, 3gp...) harus dikonversi
       let meta = await videoMeta(URL.createObjectURL(f));
       if (meta.duration > 60) throw new Error('Durasi bingkai video maksimal 60 detik (disarankan sekitar 10 detik).');
-      if (f.size > MAX_VIDEO){
-        setMsg($('#analyze-msg'), 'Berkas ' + (f.size/1e6).toFixed(1) + ' MB, mengecilkan video... mohon jangan tutup halaman ini.');
-        blob = await compressVideo(f, MAX_VIDEO - 150000, p=>setMsg($('#analyze-msg'), 'Mengecilkan video... ' + p + '%'));
-        type = 'video/webm';
+      const wantOpt = $('#v-opt').checked || f.size > MAX_VIDEO || !nativeOk;
+      if (wantOpt){
+        let alpha = false; try{ alpha = await hasAlpha(f); }catch(e){}
+        if (alpha && f.size <= MAX_VIDEO){
+          setMsg($('#analyze-msg'), 'Video memakai transparansi (alpha), jadi tidak dioptimalkan supaya lubang tetap transparan.');
+        } else {
+          try{
+            setMsg($('#analyze-msg'), 'Mengoptimalkan video (' + (f.size/1e6).toFixed(1) + ' MB)... jangan tutup halaman ini.');
+            setProg(0, 'Optimasi video 0%');
+            blob = await optimizeVideo(f, MAX_VIDEO - 400000, (p, k, n)=>setProg(p, 'Optimasi video ' + p + '%' + (k > 1 ? ' (percobaan ' + k + ' dari ' + n + ')' : '')));
+            type = blob.type || 'video/webm';
+            setProg(null, '');
+          }catch(e){
+            setProg(null, '');
+            if (!nativeOk && f.size <= MAX_VIDEO){
+              throw new Error('Format video ini tidak bisa dikonversi di browser ini. Ubah dulu ke MP4 (H.264) atau WebM, atau buka admin lewat Chrome terbaru.');
+            }
+            if (f.size > MAX_VIDEO){
+              // cadangan: cara lama (rekam ulang real-time) hanya bila ukuran melebihi batas
+              setMsg($('#analyze-msg'), 'Mengecilkan video dengan cara cadangan... ' );
+              blob = await compressVideo(f, MAX_VIDEO - 150000, p=>setProg(p, 'Mengecilkan video ' + p + '%'));
+              type = 'video/webm'; setProg(null, '');
+            }
+          }
+        }
       }
       const objectUrl = URL.createObjectURL(blob);
       const v = await videoMeta(objectUrl);
@@ -1354,17 +1796,32 @@ const FrameDetect = (function(){
     try{
       const blob = videoState.blob;
       if (blob.size > MAX_VIDEO) throw new Error('Video terlalu besar.');
-      const CH = 2400000, n = Math.ceil(blob.size / CH), uid = randId(20);
+      const CH = 1000000, n = Math.ceil(blob.size / CH), uid = randId(20);
+      const totalMB = (blob.size/1e6).toFixed(1);
+      let sentBase = 0;
+      setProg(0, 'Mengunggah video 0% (0 / ' + totalMB + ' MB)');
       for (let i = 0; i < n; i++){
-        setMsg($('#save-msg'), 'Mengunggah video ' + (i+1) + '/' + n + '...');
         const part = blob.slice(i*CH, (i+1)*CH);
         const b64 = (await fileToDataURL(part)).split(',')[1];
         let tries = 0;
         for (;;){
-          try{ await api('chunk', 'POST', { uploadId: uid, index: i, data: b64 }); break; }
-          catch(e){ if (++tries >= 3 || e.status === 401 || e.status === 413 || e.status === 400) throw e; await new Promise(r=>setTimeout(r, 1200*tries)); }
+          try{
+            await apiUpload('chunk', { uploadId: uid, index: i, data: b64 }, (loaded, total)=>{
+              const frac = total ? loaded / total : 0;
+              const done = sentBase + part.size * frac;
+              const pct = Math.round(done / blob.size * 100);
+              setProg(pct, 'Mengunggah video ' + pct + '% (' + (done/1e6).toFixed(1) + ' / ' + totalMB + ' MB), bagian ' + (i+1) + ' dari ' + n);
+            }, 90000);
+            break;
+          }catch(e){
+            if (++tries >= 4 || e.status === 401 || e.status === 413 || e.status === 400) throw e;
+            setProg(Math.round(sentBase / blob.size * 100), 'Koneksi bermasalah, mengulang bagian ' + (i+1) + ' (percobaan ' + (tries+1) + ' dari 4)...');
+            await new Promise(r=>setTimeout(r, 1500*tries));
+          }
         }
+        sentBase += part.size;
       }
+      setProg(null, 'Menyimpan di server (tahap terakhir, bisa sampai sekitar 30 detik)...');
       setMsg($('#save-msg'), 'Menyimpan...');
       const base = current.dataURL;     // gambar sampul: frame pertama dengan lubang transparan
       const preview = await makePreview(base, current.width, current.height);
@@ -1386,11 +1843,14 @@ const FrameDetect = (function(){
         isPremium: $('#premium').checked,
         priceIdr: $('#price').value
       });
+      setProg(100, 'Selesai 100%');
+      setTimeout(()=>setProg(null, ''), 2500);
       setMsg($('#save-msg'), 'Berhasil disimpan. Bingkai video akan tampil di aplikasi dalam sekitar 1 menit.', 'ok');
       toast('Bingkai video tersimpan');
       resetUploadForm();
       await refreshList();
     }catch(e){
+      setProg(null, '');
       setMsg($('#save-msg'), e.message, 'err');
       $('#btn-save').disabled = false;
     }
@@ -1414,7 +1874,7 @@ const FrameDetect = (function(){
     if (videoState){ try{ URL.revokeObjectURL(videoState.objectUrl); }catch(e){} videoState = null; }
     $('#video-panel').hidden = true; $('#kind').disabled = false;
     if (!f) return;
-    if (/^video\//.test(f.type)) return onVideoFile(f);
+    if (isVideoFile(f)) return onVideoFile(f);
     setMsg($('#analyze-msg'), 'Memproses...');
     try{
       const raw = await fileToDataURL(f);
@@ -1454,7 +1914,8 @@ const FrameDetect = (function(){
         setMsg($('#analyze-msg'), 'Lubang foto tidak terdeteksi otomatis. Gunakan "Atur lubang foto secara manual" di bawah pratinjau untuk menentukan lubangnya sendiri.', 'err'); $('#manual').open = true; autoArrange();
       }
     }catch(e){
-      setMsg($('#analyze-msg'), 'Gambar gagal diproses: ' + e.message, 'err');
+      const bad = !e || !e.message || /^(\[object|Gagal|gagal)/.test(e.message) || /load|decode|image/i.test(e.message);
+      setMsg($('#analyze-msg'), bad ? 'Format gambar ini tidak bisa dibaca browser (misalnya HEIC). Simpan ulang sebagai JPG, PNG, atau WebP lalu pilih lagi.' : 'Gambar gagal diproses: ' + e.message, 'err');
     }
   }
 

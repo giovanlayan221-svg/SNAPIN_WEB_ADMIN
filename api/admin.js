@@ -13,7 +13,7 @@ const MIME = { 'image/webp': 'webp', 'image/png': 'png', 'image/gif': 'gif' };
 const VIDEO_MIME = { 'video/mp4': 'mp4', 'video/webm': 'webm' };
 const MAX_VIDEO_BYTES = 4300000;
 const MAX_CHUNK_B64 = 3600000;
-const MAX_CHUNKS = 3;
+const MAX_CHUNKS = 6;
 const UPLOAD_ID_RE = /^[a-z0-9]{8,40}$/;
 
 function looksLikeVideo(buf, type) {
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ frames: out });
     }
 
-    // potongan unggahan video (maks 3 potongan, masing-masing sekitar 2.6 MB)
+    // potongan unggahan video (maks 6 potongan, masing-masing sekitar 1 MB)
     if (req.method === 'POST' && action === 'chunk') {
       const b = req.body || {};
       const uid = String(b.uploadId || '');
