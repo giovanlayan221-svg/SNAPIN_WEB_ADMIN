@@ -86,3 +86,8 @@ Batas yang perlu kamu tahu:
 - **Bar persen** untuk setiap tahap upload bingkai video: optimasi, unggah per bagian (dengan MB terkirim), dan penyimpanan di server. Unggahan dipecah per sekitar 1 MB dan diulang otomatis sampai 4 kali kalau koneksi putus, jadi tidak macet di "1/2".
 - **Optimasi video bingkai** (kotak centang, aktif secara bawaan): 30 fps tetap, keyframe tiap 1 detik, tanpa suara, ukuran maksimal sekitar 3,8 MB. Memakai encoder WebCodecs browser (MP4 H.264, kalau hasilnya terlalu besar otomatis WebM), jadi putarannya di aplikasi mulus. Video dengan transparansi (alpha) tidak dioptimalkan supaya lubang tetap transparan.
 - `api/admin.js`: maksimal 6 potongan unggahan (sebelumnya 3).
+
+## Update v8
+- **Nomor WhatsApp admin**: kolom di kartu "Toko QRIS" kini menerima nomor biasa (0812..., +62812...) dan otomatis diubah jadi link `https://wa.me/62...`. Muncul sebagai tombol WhatsApp di aplikasi (Toko, Buka bingkai berbayar, dan saat QRIS gagal dibuat). Setelah menyimpan, link hasilnya ditampilkan.
+- **Tes buat QRIS (Rp1.000)**: tombol baru di kartu "Toko QRIS" untuk memeriksa koneksi ke PunyaKios (status HTTP, kode QR ada atau tidak, total, biaya, pesan galat). Tidak membuat tagihan yang harus dibayar. Kalau QRIS di aplikasi gagal, jalankan tes ini dan kirim hasilnya.
+- `api/qris.js`: pemeriksaan biaya dilonggarkan dan respons galat menyertakan `reason` (tanpa kunci rahasia) yang ditampilkan di dialog aplikasi.

@@ -84,16 +84,29 @@ export default async function handler(req, res) {
       const ext = extId(), now = Date.now();
       let r;
       try { r = await payCreate(ext, base, 'Snapin ' + item.label); }
-      catch (e) { return res.status(502).json({ error: e.code === 'NOCFG' ? 'Pembayaran QRIS belum diaktifkan di server.' : 'Pembayaran belum bisa dibuat sekarang. Coba lagi sebentar.' }); }
+      catch (e) {
+        // "reason" aman ditampilkan (tidak memuat kunci): membantu mencari tahu kenapa QRIS gagal dibuat
+        const reason = String((e && e.code) || 'ERR') + ': ' + String((e && e.message) || '').slice(0, 100);
+        console.warn('qris create gagal:', reason);
+        return res.status(502).json({ error: e.code === 'NOCFG' ? 'Pembayaran QRIS belum diaktifkan di server.' : 'Pembayaran belum bisa dibuat sekarang. Coba lagi sebentar.', reason });
+      }
       const dd = (r.data && r.data.data) || {};
       const qr = [dd.qris_string, dd.qr_string, dd.qris, dd.qr_code].find((v) => typeof v === 'string' && v.length > 20) || '';
       const tot = Number(dd.total_amount != null ? dd.total_amount : dd.amount);
-      const fee = dd.fee_amount != null && Number.isFinite(Number(dd.fee_amount)) ? Number(dd.fee_amount) : tot - base;
-      // batas wajar: tarif QRIS sekitar 0,7% + Rp200
-      const sane = r.ok && qr && Number.isFinite(tot) && tot >= base && fee >= 0 && tot - base === fee && fee <= Math.round(base * 0.03) + 300;
+      // biaya = total - harga (angka yang benar-benar dibayar pembeli); fee_amount dari PunyaKios hanya pelengkap
+      const fee = tot - base;
+      // batas wajar: tarif QRIS sekitar 0,7% + Rp200; batas diberi ruang karena biaya minimum bisa lebih besar untuk harga kecil
+      const maxFee = Math.max(2500, Math.round(base * 0.05));
+      const sane = r.ok && !!qr && Number.isFinite(tot) && tot >= base && fee >= 0 && fee <= maxFee;
       if (!sane) {
-        console.warn('qris create ditolak: HTTP', r.http, Object.keys(dd).join(','));
-        return res.status(502).json({ error: 'Pembayaran belum bisa dibuat sekarang. Coba lagi sebentar.' });
+        const msg = String((r.data && (r.data.message || r.data.error || (r.data.data && r.data.data.message))) || '').slice(0, 100);
+        const reason = !r.ok ? ('HTTP ' + r.http + (msg ? ' ' + msg : ''))
+          : !qr ? 'respons tanpa kode QR'
+          : !Number.isFinite(tot) ? 'total tidak terbaca'
+          : (tot < base || fee < 0) ? ('total ' + tot + ' lebih kecil dari harga ' + base)
+          : ('biaya terlalu besar: ' + fee + ' untuk harga ' + base);
+        console.warn('qris create ditolak:', reason, '| field:', Object.keys(dd).join(','));
+        return res.status(502).json({ error: 'Pembayaran belum bisa dibuat sekarang. Coba lagi sebentar.', reason });
       }
       const pe = Date.parse(dd.expires_at);
       const expiresAt = Number.isFinite(pe) && pe > now ? Math.min(pe, now + WINDOW_MS) : now + WINDOW_MS;

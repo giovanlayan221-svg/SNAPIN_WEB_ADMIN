@@ -3,6 +3,7 @@ import {
   readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes, listPrefix, readBlob,
   readDoc, writeDoc, readSettings, PACKS_PREFIX, SALES_PREFIX, SETTINGS_PREFIX, FEATURES,
 } from '../lib/store.js';
+import { payCreate } from '../lib/punyakios.js';
 
 const MAX_IMAGE_BYTES = 3400000; // batas isi request Vercel sekitar 4.5 MB (base64)
 const RATIOS = ['any', '1:1', '3:4', '4:3', '9:16', '16:9'];
@@ -15,6 +16,21 @@ const MAX_VIDEO_BYTES = 4300000;
 const MAX_CHUNK_B64 = 3600000;
 const MAX_CHUNKS = 6;
 const UPLOAD_ID_RE = /^[a-z0-9]{8,40}$/;
+
+// Terima link https atau nomor WhatsApp biasa (0812..., +62812..., 812...) lalu jadikan link wa.me
+function normalizeBuyLink(v) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  if (/^https:\/\//i.test(v)) return v.slice(0, 300);
+  const d = v.replace(/[^\d+]/g, '');
+  if (/^\+?\d{8,15}$/.test(d)) {
+    let n = d.replace(/^\+/, '');
+    if (n.startsWith('0')) n = '62' + n.slice(1);
+    else if (n.startsWith('8')) n = '62' + n;
+    return 'https://wa.me/' + n;
+  }
+  return '';
+}
 
 function looksLikeVideo(buf, type) {
   if (type === 'video/mp4') return buf.length > 12 && buf.slice(4, 8).toString('latin1') === 'ftyp';
@@ -306,11 +322,29 @@ export default async function handler(req, res) {
       const b = req.body || {};
       const gates = {};
       FEATURES.forEach((f) => { gates[f.key] = !!(b.gates && b.gates[f.key]); });
-      const buyLink = /^https:\/\//i.test(String(b.buyLink || '')) ? String(b.buyLink).slice(0, 300) : '';
+      const buyLink = normalizeBuyLink(b.buyLink);
       const shopName = String(b.shopName || 'Snapin').trim().slice(0, 40) || 'Snapin';
       const { blobs } = await readSettings();
       await writeDoc(SETTINGS_PREFIX, { gates, buyLink, shopName }, blobs);
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, buyLink });
+    }
+    // Tes pembuatan QRIS (hanya admin): menampilkan jawaban PunyaKios yang sudah disamarkan, untuk mencari sebab QRIS gagal dibuat
+    if (req.method === 'POST' && action === 'qris-test') {
+      const amount = Math.max(1000, Math.min(50000, Math.round(Number((req.body || {}).amount) || 1000)));
+      const ext = 'SNQTEST' + crypto.randomBytes(5).toString('hex').toUpperCase();
+      try {
+        const r = await payCreate(ext, amount, 'Tes Snapin');
+        const dd = (r.data && r.data.data) || {};
+        const qr = [dd.qris_string, dd.qr_string, dd.qris, dd.qr_code].find((v) => typeof v === 'string' && v.length > 20) || '';
+        const tot = Number(dd.total_amount != null ? dd.total_amount : dd.amount);
+        return res.status(200).json({
+          ok: true, http: r.http, apiOk: r.ok, amount, total: Number.isFinite(tot) ? tot : null, feeAmount: dd.fee_amount != null ? dd.fee_amount : null,
+          hasQr: !!qr, fields: Object.keys(dd), message: String((r.data && (r.data.message || r.data.error || dd.message)) || '').slice(0, 160),
+          expiresAt: dd.expires_at || null,
+        });
+      } catch (e) {
+        return res.status(200).json({ ok: false, code: (e && e.code) || 'ERR', error: String((e && e.message) || 'gagal').slice(0, 160) });
+      }
     }
     if (req.method === 'GET' && action === 'sales') {
       const { data } = await readDoc(SALES_PREFIX, { sales: [] });

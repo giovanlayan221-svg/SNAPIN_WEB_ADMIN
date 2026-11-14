@@ -333,12 +333,15 @@
       <p class="muted">Pembeli bayar lewat QRIS di dalam aplikasi (biaya QRIS ditanggung pembeli), bingkai langsung terbuka dan tersimpan di HP-nya. Butuh variabel <b>PUNYAKIOS_API_KEY</b> dan <b>PUNYAKIOS_API_SECRET</b> di Vercel. <span id="shop-status"></span></p>
       <label for="shop-name">Nama toko</label>
       <input type="text" id="shop-name" maxlength="40" placeholder="Snapin">
-      <label for="shop-link">Link beli kode / bantuan (opsional, https)</label>
-      <input type="text" id="shop-link" placeholder="https://wa.me/62...">
+      <label for="shop-link">Nomor WhatsApp admin (untuk beli kode dan bantuan di aplikasi)</label>
+      <input type="text" id="shop-link" inputmode="tel" placeholder="Contoh: 0812xxxxxxxx atau https://wa.me/62812xxxxxxxx">
+      <p class="muted" style="margin:4px 0 0">Cukup tulis nomornya (0812..., +62812...). Nanti otomatis diubah jadi link WhatsApp dan muncul sebagai tombol "Chat admin via WhatsApp" di aplikasi (halaman Toko, Buka bingkai berbayar, dan saat QRIS gagal dibuat).</p>
       <label>Kunci fitur premium (hanya terbuka kalau pembeli punya paket yang memuatnya)</label>
       <div id="shop-gates" class="frames-pick"></div>
       <div class="row" style="margin-top:12px"><button class="btn pink" id="btn-shop-save">Simpan pengaturan</button></div>
       <div class="msg" id="shop-msg"></div>
+      <div class="row" style="margin-top:12px"><button class="btn ghost" id="btn-qris-test" type="button">Tes buat QRIS (Rp1.000)</button></div>
+      <pre id="qris-test-out" class="muted" style="white-space:pre-wrap;word-break:break-word;margin:8px 0 0;font-size:12px" hidden></pre>
     </section>
 
     <section class="card">
@@ -1314,7 +1317,12 @@ const FrameDetect = (function(){
   async function saveShop(){
     const gates = {}; $('#shop-gates').querySelectorAll('input').forEach(i=>{ gates[i.value] = i.checked; });
     setMsg($('#shop-msg'), 'Menyimpan...');
-    try{ await api('settings','POST',{ shopName:$('#shop-name').value, buyLink:$('#shop-link').value, gates }); setMsg($('#shop-msg'),'Tersimpan','ok'); }
+    try{
+      const out = await api('settings','POST',{ shopName:$('#shop-name').value, buyLink:$('#shop-link').value, gates });
+      if (out && typeof out.buyLink === 'string'){ $('#shop-link').value = out.buyLink; }
+      const typed = ($('#shop-link').value || '').trim();
+      setMsg($('#shop-msg'), out && out.buyLink ? 'Tersimpan. Tombol WhatsApp di aplikasi mengarah ke: ' + out.buyLink : 'Tersimpan (nomor WhatsApp kosong atau tidak valid, tombol WhatsApp tidak ditampilkan).', out && out.buyLink ? 'ok' : 'err');
+    }
     catch(e){ setMsg($('#shop-msg'), e.message, 'err'); }
   }
   async function savePack(){
@@ -1991,6 +1999,22 @@ const FrameDetect = (function(){
   $('#btn-save').addEventListener('click', save);
   $('#btn-code').addEventListener('click', createCodes);
   $('#btn-shop-save').addEventListener('click', saveShop);
+  $('#btn-qris-test').addEventListener('click', async ()=>{
+    const out = $('#qris-test-out'), btn = $('#btn-qris-test');
+    btn.disabled = true; out.hidden = false; out.textContent = 'Menghubungi PunyaKios...';
+    try{
+      const r = await api('qris-test', 'POST', { amount: 1000 });
+      if (!r.ok){ out.textContent = 'GAGAL menghubungi PunyaKios\nKode: ' + r.code + '\n' + r.error + (r.code === 'NOCFG' ? '\n\nIsi PUNYAKIOS_API_KEY dan PUNYAKIOS_API_SECRET di Vercel (Settings > Environment Variables), lalu Redeploy.' : ''); }
+      else {
+        const lines = ['HTTP ' + r.http + (r.apiOk ? ' (diterima)' : ' (DITOLAK)'), 'Kode QR ada: ' + (r.hasQr ? 'ya' : 'TIDAK'), 'Harga: ' + r.amount + ' | Total dibayar pembeli: ' + (r.total == null ? 'tidak terbaca' : r.total) + ' | fee_amount: ' + (r.feeAmount == null ? '-' : r.feeAmount), 'Field dari PunyaKios: ' + r.fields.join(', ')];
+        if (r.message) lines.push('Pesan PunyaKios: ' + r.message);
+        const fee = r.total == null ? null : r.total - r.amount;
+        lines.push(r.apiOk && r.hasQr && fee != null && fee >= 0 && fee <= Math.max(2500, Math.round(r.amount * 0.05)) ? '\nHASIL: OK, QRIS bisa dibuat.' : '\nHASIL: ada masalah, kirim teks di atas supaya bisa diperiksa.');
+        out.textContent = lines.join('\n');
+      }
+    }catch(e){ out.textContent = 'Gagal: ' + e.message; }
+    btn.disabled = false;
+  });
   $('#btn-pack').addEventListener('click', savePack);
   $('#pk-all').addEventListener('change', renderPackFrames);
   $('#code-scope').addEventListener('change', renderCodeFrames);
