@@ -99,6 +99,22 @@
   .dz-lay img{ width:36px; height:36px; object-fit:contain; background:#f4eef2; border-radius:8px; flex:none; }
   .dz-lay .nm{ flex:1; min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .dz-hide{ display:none !important; }
+
+  /* ---- stiker bawaan ---- */
+  .stk-q{display:grid; gap:12px; margin:10px 0;}
+  .stk-item{display:grid; grid-template-columns:120px 1fr; gap:12px; padding:10px; border:1px solid var(--line,#eadfe6); border-radius:14px; background:#fff;}
+  .stk-prev{width:120px; height:120px; border-radius:10px; display:flex; align-items:center; justify-content:center; background-color:#e9e3ea; background-image:linear-gradient(45deg,#d6cdd6 25%,transparent 25%,transparent 75%,#d6cdd6 75%),linear-gradient(45deg,#d6cdd6 25%,transparent 25%,transparent 75%,#d6cdd6 75%); background-size:14px 14px; background-position:0 0,7px 7px;}
+  .stk-prev canvas,.stk-prev img{max-width:100%; max-height:100%;}
+  .stk-ctl label{display:flex; align-items:center; gap:7px; margin:6px 0 0; font-size:13px;}
+  .stk-ctl input[type=text],.stk-ctl select{width:100%; margin-top:4px;}
+  .stk-ctl input[type=range]{width:100%;}
+  .stk-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:8px;}
+  .stk-cell{border:1px solid var(--line,#eadfe6); border-radius:12px; padding:8px; background:#fff; text-align:center;}
+  .stk-cell .stk-prev{width:100%; height:100px; margin-bottom:6px;}
+  .stk-cell b{display:block; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .stk-cell select{width:100%; margin-top:6px; font-size:12px;}
+  .stk-cell .row{margin-top:6px; gap:6px;}
+  .stk-cell .btn{padding:6px 8px; font-size:12px;}
 </style>
 </head>
 <body>
@@ -326,6 +342,17 @@
     <section class="card">
       <h2>Bingkai tersimpan</h2>
       <div id="list"><p class="muted">Memuat...</p></div>
+    </section>
+
+    <section class="card" id="stk-card">
+      <h2>Stiker bawaan</h2>
+      <p class="muted">Stiker yang diunggah di sini muncul di aplikasi Snapin pada kategori yang dipilih dan tersimpan di HP pengguna (jalan offline). Untuk gambar berlatar putih, latar dihapus otomatis: hanya putih yang tersambung ke tepi gambar yang dihapus, jadi bagian putih di dalam stiker (mata, kilau, tulisan) tetap aman. Atur "Kekuatan" bila ada sisa putih di pinggir.</p>
+      <input type="file" id="stk-files" accept="image/*" multiple>
+      <div class="stk-q" id="stk-queue"></div>
+      <div class="row"><button class="btn pink" id="btn-stk-upload" hidden>Unggah semua</button></div>
+      <div class="msg" id="stk-msg"></div>
+      <h2 style="margin-top:18px;font-size:16px">Stiker tersimpan</h2>
+      <div id="stk-list" class="stk-grid"><p class="muted">Memuat...</p></div>
     </section>
 
     <section class="card">
@@ -1152,11 +1179,156 @@ const FrameDetect = (function(){
   }
   function dataBytes(u){ return Math.floor((u.length - u.indexOf(',') - 1) * 3 / 4); }
 
+/* ============================================================
+   HAPUS LATAR PUTIH (dipakai aplikasi dan admin; algoritma sama)
+   Cara kerja: latar dicari dengan "banjir" (flood fill) yang HANYA mulai dari tepi gambar,
+   jadi bagian putih di dalam stiker (mata, kilau, tulisan) tidak ikut terhapus selama
+   tidak tersambung ke latar. Tepi dihaluskan dan warna putih yang menempel dibersihkan
+   supaya tidak ada garis putih (halo) di sekeliling stiker.
+   ============================================================ */
+function sbgBorderInfo(d,w,h){
+  const step=Math.max(1,Math.floor(Math.max(w,h)/500)); let n=0,tr=0,light=0,r=0,g=0,b=0;
+  const at=(x,y)=>{ const k=(y*w+x)*4; n++; if(d[k+3]<200){ tr++; return; } if(d[k]>=200&&d[k+1]>=200&&d[k+2]>=200){ light++; r+=d[k]; g+=d[k+1]; b+=d[k+2]; } };
+  for(let x=0;x<w;x+=step){ at(x,0); at(x,h-1); }
+  for(let y=0;y<h;y+=step){ at(0,y); at(w-1,y); }
+  return { transparent:tr/n, light:light/n, bg: light?[r/light,g/light,b/light]:[255,255,255] };
+}
+// true bila gambar memakai latar putih/terang polos dan belum transparan
+function sbgDetect(src){
+  const s=Math.min(1,300/Math.max(src.width,src.height)); const w=Math.max(1,Math.round(src.width*s)), h=Math.max(1,Math.round(src.height*s));
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(src,0,0,w,h);
+  const i=sbgBorderInfo(x.getImageData(0,0,w,h).data,w,h);
+  return i.transparent<0.25 && i.light>=0.75;
+}
+function sbgTrim(cv, maxSide){
+  const w=cv.width,h=cv.height, d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ if(d[(y*w+x)*4+3]>12){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } } }
+  if(x1<0) return cv;
+  const pad=Math.round(Math.max(x1-x0,y1-y0)*0.02)+1;
+  x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(w-1,x1+pad); y1=Math.min(h-1,y1+pad);
+  let cw=x1-x0+1, ch=y1-y0+1; const k=Math.min(1,(maxSide||900)/Math.max(cw,ch)); const ow=Math.max(1,Math.round(cw*k)), oh=Math.max(1,Math.round(ch*k));
+  const out=document.createElement('canvas'); out.width=ow; out.height=oh; const ox=out.getContext('2d'); ox.imageSmoothingQuality='high'; ox.drawImage(cv,x0,y0,cw,ch,0,0,ow,oh); return out;
+}
+/* opsi: tol (8-90, makin besar makin banyak putih terhapus), holes (hapus juga putih yang terkurung), max (sisi terpanjang hasil) */
+function sbgRemove(src,o){
+  o=o||{}; const tol=Math.max(4,Math.min(110,o.tol==null?38:o.tol));
+  const k0=Math.min(1,(o.work||1100)/Math.max(src.width,src.height)); const w=Math.max(1,Math.round(src.width*k0)), h=Math.max(1,Math.round(src.height*k0));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h; const cx=cv.getContext('2d',{willReadFrequently:true}); cx.imageSmoothingQuality='high'; cx.drawImage(src,0,0,w,h);
+  const im=cx.getImageData(0,0,w,h), d=im.data, N=w*h;
+  const info=sbgBorderInfo(d,w,h); const B=info.light>=0.5?info.bg:[255,255,255];
+  const dist=new Uint8Array(N);
+  for(let i=0,k=0;i<N;i++,k+=4){ if(d[k+3]<24){ dist[i]=0; continue; } const a=Math.abs(d[k]-B[0]), b=Math.abs(d[k+1]-B[1]), c=Math.abs(d[k+2]-B[2]); dist[i]=a>b?(a>c?a:c):(b>c?b:c); }
+  const rem=new Uint8Array(N), st=new Int32Array(N); let sp=0;
+  const push=i=>{ if(!rem[i]&&dist[i]<=tol){ rem[i]=1; st[sp++]=i; } };
+  for(let x=0;x<w;x++){ push(x); push((h-1)*w+x); } for(let y=0;y<h;y++){ push(y*w); push(y*w+w-1); }
+  while(sp){ const i=st[--sp], x=i%w; if(x>0)push(i-1); if(x<w-1)push(i+1); if(i>=w)push(i-w); if(i<N-w)push(i+w); }
+  if(o.holes){ // putih terkurung (mis. lubang pada gagang): hanya yang cukup luas, agar kilau kecil tetap aman
+    const minA=Math.max(200,Math.round(N*0.05)), vis=new Uint8Array(N), comp=new Int32Array(N);
+    for(let s=0;s<N;s++){ if(rem[s]||vis[s]||dist[s]>tol) continue; let n=0; sp=0; st[sp++]=s; vis[s]=1;
+      while(sp){ const i=st[--sp]; comp[n++]=i; const x=i%w; const nb=[x>0?i-1:-1,x<w-1?i+1:-1,i>=w?i-w:-1,i<N-w?i+w:-1]; for(const j of nb){ if(j>=0&&!vis[j]&&!rem[j]&&dist[j]<=tol){ vis[j]=1; st[sp++]=j; } } }
+      if(n>=minA){ for(let q=0;q<n;q++) rem[comp[q]]=1; } }
+  }
+  // tepi: piksel yang bersebelahan dengan latar dihaluskan + putih yang menempel dibersihkan
+  const near=new Uint8Array(N);
+  const mark=(srcMask,val)=>{ const out=[]; for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ const i=y*w+x; if(rem[i]||near[i]) continue; let hit=false; for(let dy=-1;dy<=1&&!hit;dy++){ const yy=y+dy; if(yy<0||yy>=h) continue; for(let dx=-1;dx<=1;dx++){ const xx=x+dx; if(xx<0||xx>=w) continue; const j=yy*w+xx; if(rem[j]||(val===2&&near[j]===1)){ hit=true; break; } } } if(hit) out.push(i); } } out.forEach(i=>{ near[i]=val; }); };
+  mark(null,1); mark(null,2);
+  for(let i=0;i<N;i++){ if(!near[i]) continue; const x=i%w, y=(i/w)|0; let fr=0,fg=0,fb=0,fc=0;
+    for(let dy=-3;dy<=3;dy++){ const yy=y+dy; if(yy<0||yy>=h) continue; for(let dx=-3;dx<=3;dx++){ const xx=x+dx; if(xx<0||xx>=w) continue; const j=yy*w+xx; if(rem[j]||near[j]) continue; const k=j*4; fr+=d[k]; fg+=d[k+1]; fb+=d[k+2]; fc++; } }
+    const k=i*4; if(!fc) continue; fr/=fc; fg/=fc; fb/=fc;
+    const vx=fr-B[0], vy=fg-B[1], vz=fb-B[2], vv=vx*vx+vy*vy+vz*vz;
+    if(vv<26*26){ continue; } // warna stiker nyaris sama dengan latar: tidak bisa dipisah, biarkan utuh
+    let a=((d[k]-B[0])*vx+(d[k+1]-B[1])*vy+(d[k+2]-B[2])*vz)/vv; a=a<0?0:(a>1?1:a);
+    if(a<0.06){ rem[i]=1; continue; }
+    d[k]=Math.max(0,Math.min(255,B[0]+(d[k]-B[0])/a)); d[k+1]=Math.max(0,Math.min(255,B[1]+(d[k+1]-B[1])/a)); d[k+2]=Math.max(0,Math.min(255,B[2]+(d[k+2]-B[2])/a)); d[k+3]=Math.round(255*a*(d[k+3]/255));
+  }
+  for(let i=0,k=3;i<N;i++,k+=4){ if(rem[i]){ d[k]=0; d[k-1]=0; d[k-2]=0; d[k-3]=0; } }
+  cx.putImageData(im,0,0);
+  return sbgTrim(cv,o.max||900);
+}
+
+  /* ---------- Stiker bawaan ---------- */
+  const STK_CATS = { kawaii:'Cute & Kawaii', nature:'Bunga & Alam', love:'Hati & Cinta', stars:'Bintang & Kilau', animals:'Hewan', food:'Makanan & Minuman', friend:'Persahabatan', doodle:'Doodle', acc:'Aksesori', season:'Perayaan' };
+  const catOpts = (sel)=> Object.keys(STK_CATS).map(k=>'<option value="'+k+'"'+(k===sel?' selected':'')+'>'+STK_CATS[k]+'</option>').join('');
+  const escH = (t)=> String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let stkQueue = [];
+  function stkRender(it){
+    const c = it.on ? sbgRemove(it.img,{ tol:it.tol, holes:it.holes, max:900 }) : (function(){ const k=Math.min(1,900/Math.max(it.img.width,it.img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(it.img.width*k); cv.height=Math.round(it.img.height*k); cv.getContext('2d').drawImage(it.img,0,0,cv.width,cv.height); return cv; })();
+    it.canvas = c;
+    const pv = it.el.querySelector('canvas'); const k = Math.min(1,116/Math.max(c.width,c.height)); pv.width = Math.max(1,Math.round(c.width*k)); pv.height = Math.max(1,Math.round(c.height*k));
+    const x = pv.getContext('2d'); x.clearRect(0,0,pv.width,pv.height); x.drawImage(c,0,0,pv.width,pv.height);
+  }
+  function stkAddItem(it){
+    const el = document.createElement('div'); el.className = 'stk-item'; it.el = el;
+    el.innerHTML = '<div class="stk-prev"><canvas></canvas></div><div class="stk-ctl">'+
+      '<input type="text" maxlength="40" class="q-name" placeholder="Nama stiker" value="'+escH(it.name)+'">'+
+      '<select class="q-cat">'+catOpts(it.cat)+'</select>'+
+      '<label><input type="checkbox" class="q-on"'+(it.on?' checked':'')+'> Hapus latar putih'+(it.detected?' (terdeteksi)':'')+'</label>'+
+      '<label style="display:block">Kekuatan: <b class="q-tv">'+it.tol+'</b><input type="range" class="q-tol" min="10" max="90" value="'+it.tol+'"></label>'+
+      '<label><input type="checkbox" class="q-holes"> Hapus juga lubang putih yang besar</label>'+
+      '<div class="row" style="margin-top:8px"><button class="btn ghost q-del" type="button">Buang</button></div></div>';
+    let t = null; const upd = ()=>{ clearTimeout(t); t = setTimeout(()=>stkRender(it),120); };
+    el.querySelector('.q-name').addEventListener('input', e=>{ it.name = e.target.value; });
+    el.querySelector('.q-cat').addEventListener('change', e=>{ it.cat = e.target.value; });
+    el.querySelector('.q-on').addEventListener('change', e=>{ it.on = e.target.checked; upd(); });
+    el.querySelector('.q-tol').addEventListener('input', e=>{ it.tol = parseInt(e.target.value,10); el.querySelector('.q-tv').textContent = it.tol; upd(); });
+    el.querySelector('.q-holes').addEventListener('change', e=>{ it.holes = e.target.checked; upd(); });
+    el.querySelector('.q-del').addEventListener('click', ()=>{ stkQueue = stkQueue.filter(x=>x!==it); el.remove(); $('#btn-stk-upload').hidden = !stkQueue.length; });
+    $('#stk-queue').appendChild(el); stkRender(it);
+  }
+  $('#stk-files').addEventListener('change', async e=>{
+    const files = Array.from(e.target.files||[]); e.target.value = '';
+    for (const f of files){
+      try{
+        const img = await loadImage(await fileToDataURL(f));
+        const detected = sbgDetect(img);
+        const it = { img, name:f.name.replace(/\.[^.]+$/,'').slice(0,40), cat:'doodle', on:detected, detected, tol:38, holes:false };
+        stkQueue.push(it); stkAddItem(it);
+      }catch(err){ setMsg($('#stk-msg'), 'Gambar "'+f.name+'" tidak bisa dibaca', 'err'); }
+    }
+    $('#btn-stk-upload').hidden = !stkQueue.length;
+  });
+  function stkToDataURL(c){
+    let u = c.toDataURL('image/png');
+    if (dataBytes(u) > 1100000){ try{ const w = c.toDataURL('image/webp',0.9); if (w.indexOf('image/webp')>=0) u = w; }catch(e){} }
+    if (dataBytes(u) > 1100000){ const k = 0.7; const s = document.createElement('canvas'); s.width = Math.round(c.width*k); s.height = Math.round(c.height*k); s.getContext('2d').drawImage(c,0,0,s.width,s.height); u = s.toDataURL('image/webp',0.88); }
+    return u;
+  }
+  $('#btn-stk-upload').addEventListener('click', async ()=>{
+    const btn = $('#btn-stk-upload'); btn.disabled = true; let ok = 0, fail = 0;
+    for (const it of stkQueue.slice()){
+      try{
+        await api('sticker-save','POST',{ label:(it.name||'').trim()||'Stiker', cat:it.cat, image: stkToDataURL(it.canvas) });
+        ok++; stkQueue = stkQueue.filter(x=>x!==it); it.el.remove();
+      }catch(err){ fail++; setMsg($('#stk-msg'), (err && err.message) || 'Gagal mengunggah', 'err'); }
+    }
+    btn.disabled = false; btn.hidden = !stkQueue.length;
+    if (ok) setMsg($('#stk-msg'), ok+' stiker terunggah'+(fail?', '+fail+' gagal':''), fail?'err':'ok');
+    await refreshStickers();
+  });
+  async function refreshStickers(){
+    const box = $('#stk-list');
+    try{
+      const j = await api('sticker-list');
+      if (!j.stickers.length){ box.innerHTML = '<p class="muted">Belum ada stiker dari admin.</p>'; return; }
+      box.innerHTML = '';
+      j.stickers.forEach(s=>{
+        const d = document.createElement('div'); d.className = 'stk-cell';
+        d.innerHTML = '<div class="stk-prev"><img src="'+s.url+'" alt="" loading="lazy"></div><b title="'+escH(s.label)+'">'+escH(s.label)+'</b><select>'+catOpts(s.cat)+'</select><div class="row"><button class="btn ghost s-ren" type="button">Ubah nama</button><button class="btn ghost s-del" type="button">Hapus</button></div>';
+        d.querySelector('select').addEventListener('change', async e=>{ try{ await api('sticker-update','POST',{ id:s.id, cat:e.target.value }); toast('Kategori diubah'); }catch(err){ toast(err.message); } });
+        d.querySelector('.s-ren').addEventListener('click', async ()=>{ const v = prompt('Nama stiker', s.label); if (v==null||!v.trim()) return; try{ await api('sticker-update','POST',{ id:s.id, label:v.trim() }); await refreshStickers(); }catch(err){ toast(err.message); } });
+        d.querySelector('.s-del').addEventListener('click', async ()=>{ if (!confirm('Hapus stiker "'+s.label+'"? Stiker hilang dari aplikasi setelah pengguna terhubung ke server.')) return; try{ await api('sticker-delete','POST',{ id:s.id }); await refreshStickers(); }catch(err){ toast(err.message); } });
+        box.appendChild(d);
+      });
+    }catch(err){ box.innerHTML = '<p class="muted">Gagal memuat: '+escH(err.message)+'</p>'; }
+  }
+
   async function showApp(){
     $('#login-card').hidden = true;
     $('#app').hidden = false;
     $('#origin').textContent = location.origin;
     await refreshList();
+    refreshStickers();
     await refreshCodes();
     await refreshShop();
     await refreshSales();

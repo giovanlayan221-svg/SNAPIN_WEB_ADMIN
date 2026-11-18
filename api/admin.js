@@ -2,9 +2,11 @@ import crypto from 'node:crypto';
 import {
   readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes, listPrefix, readBlob,
   readDoc, writeDoc, readSettings, PACKS_PREFIX, SALES_PREFIX, SETTINGS_PREFIX, FEATURES,
+  readStickers, writeStickers, STICKER_CATS,
 } from '../lib/store.js';
 import { payCreate } from '../lib/punyakios.js';
 
+const MAX_STICKER_BYTES = 1500000; // stiker kecil (PNG/WebP transparan), dikirim sebagai base64
 const MAX_IMAGE_BYTES = 3400000; // batas isi request Vercel sekitar 4.5 MB (base64)
 const RATIOS = ['any', '1:1', '3:4', '4:3', '9:16', '16:9'];
 const KINDS = ['photo', 'video'];
@@ -86,6 +88,10 @@ function newCode() {
   let s = '';
   for (let i = 0; i < 12; i++) s += alphabet[bytes[i] % alphabet.length];
   return 'SNP-' + s.slice(0, 4) + '-' + s.slice(4, 8) + '-' + s.slice(8, 12);
+}
+
+function publicSticker(s) {
+  return { id: s.id, label: s.label, cat: s.cat, createdAt: s.createdAt, url: '/api/sticker-img?id=' + encodeURIComponent(s.id) };
 }
 
 export default async function handler(req, res) {
@@ -251,6 +257,47 @@ export default async function handler(req, res) {
       try { await deleteBlob(f.blobUrl); } catch (e) { /* abaikan */ }
       if (f.previewUrl) { try { await deleteBlob(f.previewUrl); } catch (e) { /* abaikan */ } }
       await writeFrames(frames.filter((x) => x.id !== id), blobs);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ---- stiker bawaan dari admin ----
+    if (req.method === 'GET' && action === 'sticker-list') {
+      const { stickers } = await readStickers();
+      return res.status(200).json({ cats: STICKER_CATS, stickers: stickers.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(publicSticker) });
+    }
+    if (req.method === 'POST' && action === 'sticker-save') {
+      const b = req.body || {};
+      const label = String(b.label || '').trim().slice(0, 40) || 'Stiker';
+      const cat = STICKER_CATS.includes(b.cat) ? b.cat : 'doodle';
+      const m = /^data:(image\/(?:webp|png));base64,(.+)$/.exec(String(b.image || ''));
+      if (!m) return res.status(400).json({ error: 'Stiker harus PNG atau WebP (transparan)' });
+      const buf = Buffer.from(m[2], 'base64');
+      if (!buf.length || buf.length > MAX_STICKER_BYTES) return res.status(413).json({ error: 'Stiker terlalu besar (maks sekitar 1,1 MB). Kecilkan ukurannya.' });
+      const id = crypto.randomBytes(6).toString('hex');
+      const blob = await putAuto('snapin/stickers/' + id + '.' + MIME[m[1]], buf, { contentType: m[1], addRandomSuffix: false });
+      const { stickers, blobs } = await readStickers();
+      const rec = { id, label, cat, blobUrl: blob.url, contentType: m[1], createdAt: Date.now() };
+      stickers.push(rec);
+      await writeStickers(stickers, blobs);
+      return res.status(200).json({ ok: true, sticker: publicSticker(rec) });
+    }
+    if (req.method === 'POST' && action === 'sticker-update') {
+      const b = req.body || {};
+      const { stickers, blobs } = await readStickers();
+      const s = stickers.find((x) => x.id === String(b.id || ''));
+      if (!s) return res.status(404).json({ error: 'Stiker tidak ditemukan' });
+      if (b.label !== undefined) s.label = String(b.label || '').trim().slice(0, 40) || s.label;
+      if (b.cat !== undefined && STICKER_CATS.includes(b.cat)) s.cat = b.cat;
+      await writeStickers(stickers, blobs);
+      return res.status(200).json({ ok: true, sticker: publicSticker(s) });
+    }
+    if (req.method === 'POST' && action === 'sticker-delete') {
+      const id = String((req.body && req.body.id) || '');
+      const { stickers, blobs } = await readStickers();
+      const s = stickers.find((x) => x.id === id);
+      if (!s) return res.status(404).json({ error: 'Stiker tidak ditemukan' });
+      try { await deleteBlob(s.blobUrl); } catch (e) { /* abaikan */ }
+      await writeStickers(stickers.filter((x) => x.id !== id), blobs);
       return res.status(200).json({ ok: true });
     }
 

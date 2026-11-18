@@ -91,3 +91,6 @@ Batas yang perlu kamu tahu:
 - **Nomor WhatsApp admin**: kolom di kartu "Toko QRIS" kini menerima nomor biasa (0812..., +62812...) dan otomatis diubah jadi link `https://wa.me/62...`. Muncul sebagai tombol WhatsApp di aplikasi (Toko, Buka bingkai berbayar, dan saat QRIS gagal dibuat). Setelah menyimpan, link hasilnya ditampilkan.
 - **Tes buat QRIS (Rp1.000)**: tombol baru di kartu "Toko QRIS" untuk memeriksa koneksi ke PunyaKios (status HTTP, kode QR ada atau tidak, total, biaya, pesan galat). Tidak membuat tagihan yang harus dibayar. Kalau QRIS di aplikasi gagal, jalankan tes ini dan kirim hasilnya.
 - `api/qris.js`: pemeriksaan biaya dilonggarkan dan respons galat menyertakan `reason` (tanpa kunci rahasia) yang ditampilkan di dialog aplikasi.
+
+## Stiker bawaan (v9)
+Admin > "Stiker bawaan": unggah gambar (latar putih dihapus otomatis, bagian putih di dalam stiker aman), beri nama dan kategori. Endpoint publik: `/api/stickers` (daftar) dan `/api/sticker-img?id=` (gambar). Data disimpan di Blob seperti bingkai (`snapin/stickers-*`).
