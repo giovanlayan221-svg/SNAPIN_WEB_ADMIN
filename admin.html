@@ -344,6 +344,25 @@
       <div id="list"><p class="muted">Memuat...</p></div>
     </section>
 
+    <section class="card" id="thm-card">
+      <h2>Tema</h2>
+      <p class="muted">Buat tema (pola kain, garis, kotak-kotak, titik, gradasi) yang muncul di aplikasi Snapin pada kategori "Tema saya" dan tersimpan di HP pengguna (jalan offline).</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <canvas id="thm-pv" width="150" height="260" style="border-radius:12px;border:1px solid var(--line)"></canvas>
+        <div style="flex:1;min-width:220px">
+          <input id="thm-name" maxlength="30" placeholder="Nama tema, contoh: Linen Pink" style="width:100%;box-sizing:border-box;padding:10px;border-radius:12px;border:1px solid var(--line);margin-bottom:8px">
+          <div id="thm-types" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><label>Utama<br><input type="color" id="thm-c1"></label><label>Kedua<br><input type="color" id="thm-c2"></label><label>Garis foto<br><input type="color" id="thm-bd"></label></div>
+          <label style="font-size:12px">Ukuran pola<input type="range" id="thm-size" min="1" max="3" step="0.5" style="width:100%"></label>
+          <label style="font-size:12px">Ketebalan / jarak<input type="range" id="thm-line" min="1" max="3" step="0.5" style="width:100%"></label>
+          <div class="row"><button class="btn pink" id="thm-save" type="button">Simpan tema</button><button class="btn ghost" id="thm-reset" type="button" hidden>Batal ubah</button></div>
+        </div>
+      </div>
+      <div class="msg" id="thm-msg"></div>
+      <h2 style="margin-top:18px;font-size:16px">Tema tersimpan</h2>
+      <div id="thm-list" class="stk-grid"><p class="muted">Memuat...</p></div>
+    </section>
+
     <section class="card" id="stk-card">
       <h2>Stiker bawaan</h2>
       <p class="muted">Stiker yang diunggah di sini muncul di aplikasi Snapin pada kategori yang dipilih dan tersimpan di HP pengguna (jalan offline). Untuk gambar berlatar putih, latar dihapus otomatis: hanya putih yang tersambung ke tepi gambar yang dihapus, jadi bagian putih di dalam stiker (mata, kilau, tulisan) tetap aman. Atur "Kekuatan" bila ada sisa putih di pinggir.</p>
@@ -1306,6 +1325,97 @@ function sbgRemove(src,o){
     if (ok) setMsg($('#stk-msg'), ok+' stiker terunggah'+(fail?', '+fail+' gagal':''), fail?'err':'ok');
     await refreshStickers();
   });
+
+  /* ---------- Tema ---------- */
+  function patMix(a,b,t){ const pa=parseInt(a.slice(1),16), pb=parseInt(b.slice(1),16); const m=(sh)=>Math.round(((pa>>sh)&255)*(1-t)+((pb>>sh)&255)*t);
+    return 'rgb('+m(16)+','+m(8)+','+m(0)+')'; }
+  function drawPattern(ctx, W, H, p){
+    p = p || {}; const c1=p.c1||'#FFD3E4', c2=p.c2||'#FFFFFF', size=+p.size||2, line=+p.line||2;
+    const u = Math.max(6, W/40*size), type = p.type||'solid';
+    ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
+    ctx.fillStyle = c1; ctx.fillRect(0,0,W,H);
+    const lines = (col,alpha,lw,fn)=>{ ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=alpha; ctx.lineWidth=lw; ctx.beginPath(); fn(); ctx.stroke(); ctx.restore(); };
+    if (type==='gradient'){ const g=ctx.createLinearGradient(0,0,W*0.6,H); g.addColorStop(0,c1); g.addColorStop(1,c2); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+    else if (type==='hstripe' || type==='vstripe'){
+      const per=u*3, th=per*(0.2+0.18*line); ctx.fillStyle=c2;
+      if (type==='hstripe') for (let y=0;y<H;y+=per) ctx.fillRect(0,y,W,th); else for (let x=0;x<W;x+=per) ctx.fillRect(x,0,th,H);
+    } else if (type==='dstripe'){
+      const per=u*3, th=per*(0.2+0.18*line); ctx.fillStyle=c2; ctx.translate(W/2,H/2); ctx.rotate(-Math.PI/4); const R=Math.hypot(W,H);
+      for (let x=-R;x<R;x+=per) ctx.fillRect(x,-R,th,R*2);
+    } else if (type==='gingham'){
+      const per=u*2.4; ctx.fillStyle=c2;
+      ctx.globalAlpha=0.45; for (let y=0;y<H;y+=per*2) ctx.fillRect(0,y,W,per); for (let x=0;x<W;x+=per*2) ctx.fillRect(x,0,per,H);
+    } else if (type==='dots'){
+      const per=u*2.2, r=per*(0.12+0.07*line); ctx.fillStyle=c2; let row=0;
+      for (let y=per/2;y<H+per;y+=per*0.87,row++) for (let x=(row%2?per:per/2);x<W+per;x+=per){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+    } else if (type==='linen'){
+      const sp=u*0.28*(0.8+0.2*line);
+      lines(c2,0.22,Math.max(1,sp*0.45),()=>{ for (let y=0;y<H;y+=sp){ const j=Math.sin(y*12.9898)*sp*0.3; ctx.moveTo(0,y+j); ctx.lineTo(W,y+j); } });
+      lines(c2,0.18,Math.max(1,sp*0.4),()=>{ for (let x=0;x<W;x+=sp){ const j=Math.sin(x*78.233)*sp*0.3; ctx.moveTo(x+j,0); ctx.lineTo(x+j,H); } });
+    } else if (type==='denim'){
+      const sp=u*0.26*(0.8+0.2*line);
+      lines(c2,0.2,Math.max(1,sp*0.5),()=>{ for (let k=-H;k<W;k+=sp){ ctx.moveTo(k,0); ctx.lineTo(k+H,H); } });
+      lines(patMix(c1,'#000000',0.35),0.12,Math.max(1,sp*0.4),()=>{ for (let y=0;y<H;y+=sp*2){ ctx.moveTo(0,y); ctx.lineTo(W,y); } });
+    } else if (type==='satin'){
+      const per=Math.max(W,H)*(0.35+0.1*size); ctx.translate(W/2,H/2); ctx.rotate(-0.5); const R=Math.hypot(W,H);
+      for (let x=-R;x<R;x+=per){ const g=ctx.createLinearGradient(x,0,x+per,0); g.addColorStop(0,c1); g.addColorStop(0.5,c2); g.addColorStop(1,c1); ctx.fillStyle=g; ctx.fillRect(x,-R,per+1,R*2); }
+    } else if (type==='knit'){
+      const w=u*0.9, h=u*1.1;
+      lines(c2,0.4,Math.max(1.5,w*0.14*line),()=>{ for (let y=0;y<H+h;y+=h) for (let x=0;x<W+w;x+=w){ ctx.moveTo(x,y); ctx.lineTo(x+w/2,y+h*0.8); ctx.lineTo(x+w,y); } });
+    } else if (type==='canvas'){
+      const sp=u*0.3*(0.8+0.2*line);
+      lines(c2,0.16,Math.max(1,sp*0.5),()=>{ for (let y=0;y<H;y+=sp){ ctx.moveTo(0,y); ctx.lineTo(W,y); } for (let x=0;x<W;x+=sp){ ctx.moveTo(x,0); ctx.lineTo(x,H); } });
+      lines(patMix(c1,'#000000',0.4),0.08,1,()=>{ for (let y=0;y<H;y+=sp*3){ ctx.moveTo(0,y); ctx.lineTo(W,y); } });
+    }
+    ctx.restore();
+  }
+  const PAT_TYPES = [
+    ['solid','Polos'],['gradient','Gradasi'],['linen','Linen'],['denim','Denim'],['satin','Satin'],['knit','Rajut'],['canvas','Kanvas'],
+    ['hstripe','Garis panjang'],['vstripe','Garis vertikal'],['dstripe','Garis diagonal'],['gingham','Kotak-kotak'],['dots','Titik']
+  ];
+  
+  (function(){
+    const TP = { type:'linen', c1:'#FFD3E4', c2:'#FFFFFF', border:'#FFFFFF', size:2, line:2 };
+    let editId = null;
+    const cv = $('#thm-pv');
+    function cells(W,H){ const pad=W*0.07, gap=W*0.045, foot=H*0.07, cw=W-pad*2, ch=(H-pad*2-foot-gap*2)/3; return [0,1,2].map(i=>({x:pad,y:pad+i*(ch+gap),w:cw,h:ch})); }
+    function paint(c, pat, W, H){
+      c.width=W; c.height=H; const x=c.getContext('2d'); drawPattern(x,W,H,pat);
+      cells(W,H).forEach(k=>{ x.fillStyle='#d9d3df'; x.fillRect(k.x,k.y,k.w,k.h); x.strokeStyle=pat.border; x.lineWidth=Math.max(2,W*0.012); x.strokeRect(k.x-W*0.012,k.y-W*0.012,k.w+W*0.024,k.h+W*0.024); });
+    }
+    function prev(){ paint(cv, TP, 150, 260); }
+    function types(){ const box=$('#thm-types'); box.innerHTML=''; PAT_TYPES.forEach(([k,l])=>{ const b=document.createElement('button'); b.type='button'; b.className='btn ghost'; b.style.cssText='padding:5px 9px;font-size:12px;'+(TP.type===k?'outline:2px solid #ff6fa0':''); b.textContent=l; b.addEventListener('click',()=>{ TP.type=k; types(); prev(); }); box.appendChild(b); }); }
+    function fill(){ $('#thm-c1').value=TP.c1; $('#thm-c2').value=TP.c2; $('#thm-bd').value=TP.border; $('#thm-size').value=TP.size; $('#thm-line').value=TP.line; types(); prev(); }
+    [['#thm-c1','c1'],['#thm-c2','c2'],['#thm-bd','border'],['#thm-size','size'],['#thm-line','line']].forEach(([s,k])=>$(s).addEventListener('input',e=>{ TP[k]=e.target.value; prev(); }));
+    function resetEd(){ editId=null; $('#thm-name').value=''; $('#thm-save').textContent='Simpan tema'; $('#thm-reset').hidden=true; }
+    $('#thm-reset').addEventListener('click', resetEd);
+    $('#thm-save').addEventListener('click', async ()=>{
+      const body = { name:$('#thm-name').value, pat:Object.assign({},TP) };
+      try{
+        if (editId){ body.id=editId; await api('theme-update','POST',body); } else await api('theme-save','POST',body);
+        setMsg($('#thm-msg'), 'Tema tersimpan. Muncul di aplikasi setelah pengguna terhubung ke server.', 'ok'); resetEd(); await refreshThemes();
+      }catch(err){ setMsg($('#thm-msg'), (err&&err.message)||'Gagal menyimpan', 'err'); }
+    });
+    async function refreshThemes(){
+      const box=$('#thm-list');
+      try{
+        const j = await api('theme-list');
+        if (!j.themes.length){ box.innerHTML='<p class="muted">Belum ada tema dari admin.</p>'; return; }
+        box.innerHTML='';
+        j.themes.forEach(t=>{
+          const d=document.createElement('div'); d.className='stk-cell';
+          d.innerHTML='<div class="stk-prev"><canvas width="90" height="156" style="width:100%;border-radius:8px"></canvas></div><b title="'+escH(t.name)+'">'+escH(t.name)+'</b><div class="row"><button class="btn ghost t-ed" type="button">Ubah</button><button class="btn ghost t-ren" type="button">Nama</button><button class="btn ghost t-del" type="button">Hapus</button></div>';
+          paint(d.querySelector('canvas'), t.pat, 90, 156);
+          d.querySelector('.t-ed').addEventListener('click',()=>{ Object.assign(TP,t.pat); editId=t.id; $('#thm-name').value=t.name; $('#thm-save').textContent='Simpan perubahan'; $('#thm-reset').hidden=false; fill(); $('#thm-card').scrollIntoView({behavior:'smooth'}); });
+          d.querySelector('.t-ren').addEventListener('click', async ()=>{ const v=prompt('Nama tema',t.name); if(v==null||!v.trim()) return; try{ await api('theme-update','POST',{id:t.id,name:v.trim()}); await refreshThemes(); }catch(err){ toast(err.message); } });
+          d.querySelector('.t-del').addEventListener('click', async ()=>{ if(!confirm('Hapus tema "'+t.name+'"? Tema hilang dari aplikasi setelah pengguna terhubung ke server.')) return; try{ await api('theme-delete','POST',{id:t.id}); await refreshThemes(); }catch(err){ toast(err.message); } });
+          box.appendChild(d);
+        });
+      }catch(err){ box.innerHTML='<p class="muted">Gagal memuat: '+escH(err.message)+'</p>'; }
+    }
+    fill(); refreshThemes();
+  })();
+
   async function refreshStickers(){
     const box = $('#stk-list');
     try{

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import {
   readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes, listPrefix, readBlob,
   readDoc, writeDoc, readSettings, PACKS_PREFIX, SALES_PREFIX, SETTINGS_PREFIX, FEATURES,
-  readStickers, writeStickers, STICKER_CATS,
+  readStickers, writeStickers, STICKER_CATS, readThemes, writeThemes, THEME_TYPES,
 } from '../lib/store.js';
 import { payCreate } from '../lib/punyakios.js';
 
@@ -90,6 +90,13 @@ function newCode() {
   return 'SNP-' + s.slice(0, 4) + '-' + s.slice(4, 8) + '-' + s.slice(8, 12);
 }
 
+
+function cleanPat(p) {
+  p = p || {};
+  const col = (v, d) => (/^#[0-9a-fA-F]{6}$/.test(String(v || '')) ? String(v) : d);
+  const num = (v, d) => { const n = Number(v); return n >= 1 && n <= 3 ? n : d; };
+  return { type: THEME_TYPES.includes(p.type) ? p.type : 'solid', c1: col(p.c1, '#FFD3E4'), c2: col(p.c2, '#FFFFFF'), border: col(p.border, '#FFFFFF'), size: num(p.size, 2), line: num(p.line, 2) };
+}
 function publicSticker(s) {
   return { id: s.id, label: s.label, cat: s.cat, createdAt: s.createdAt, url: '/api/sticker-img?id=' + encodeURIComponent(s.id) };
 }
@@ -298,6 +305,39 @@ export default async function handler(req, res) {
       if (!s) return res.status(404).json({ error: 'Stiker tidak ditemukan' });
       try { await deleteBlob(s.blobUrl); } catch (e) { /* abaikan */ }
       await writeStickers(stickers.filter((x) => x.id !== id), blobs);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ---- tema buatan admin ----
+    if (req.method === 'GET' && action === 'theme-list') {
+      const { themes } = await readThemes();
+      return res.status(200).json({ types: THEME_TYPES, themes: themes.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) });
+    }
+    if (req.method === 'POST' && action === 'theme-save') {
+      const b = req.body || {};
+      const { themes, blobs } = await readThemes();
+      if (themes.length >= 60) return res.status(400).json({ error: 'Maksimal 60 tema' });
+      const rec = { id: crypto.randomBytes(6).toString('hex'), name: String(b.name || '').trim().slice(0, 30) || 'Tema', pat: cleanPat(b.pat), createdAt: Date.now() };
+      themes.push(rec);
+      await writeThemes(themes, blobs);
+      return res.status(200).json({ ok: true, theme: rec });
+    }
+    if (req.method === 'POST' && action === 'theme-update') {
+      const b = req.body || {};
+      const { themes, blobs } = await readThemes();
+      const t = themes.find((x) => x.id === String(b.id || ''));
+      if (!t) return res.status(404).json({ error: 'Tema tidak ditemukan' });
+      if (b.name !== undefined) t.name = String(b.name || '').trim().slice(0, 30) || t.name;
+      if (b.pat !== undefined) t.pat = cleanPat(b.pat);
+      t.updatedAt = Date.now();
+      await writeThemes(themes, blobs);
+      return res.status(200).json({ ok: true, theme: t });
+    }
+    if (req.method === 'POST' && action === 'theme-delete') {
+      const id = String((req.body && req.body.id) || '');
+      const { themes, blobs } = await readThemes();
+      if (!themes.some((x) => x.id === id)) return res.status(404).json({ error: 'Tema tidak ditemukan' });
+      await writeThemes(themes.filter((x) => x.id !== id), blobs);
       return res.status(200).json({ ok: true });
     }
 
