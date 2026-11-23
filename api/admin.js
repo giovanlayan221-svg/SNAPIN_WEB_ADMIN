@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import {
   readFrames, writeFrames, isAdmin, putAuto, deleteBlob, friendlyError, readCodes, writeCodes, listPrefix, readBlob,
   readDoc, writeDoc, readSettings, PACKS_PREFIX, SALES_PREFIX, SETTINGS_PREFIX, FEATURES,
-  readStickers, writeStickers, STICKER_CATS, readThemes, writeThemes, THEME_TYPES,
+  readStickers, writeStickers, STICKER_CATS, readThemes, writeThemes, THEME_TYPES, readTemplates, writeTemplates, TEMPLATE_KINDS,
 } from '../lib/store.js';
 import { payCreate } from '../lib/punyakios.js';
 
+const MAX_TEMPLATE_BYTES = 3300000; // template besar (PNG/WebP), dikirim sebagai base64
 const MAX_STICKER_BYTES = 1500000; // stiker kecil (PNG/WebP transparan), dikirim sebagai base64
 const MAX_IMAGE_BYTES = 3400000; // batas isi request Vercel sekitar 4.5 MB (base64)
 const RATIOS = ['any', '1:1', '3:4', '4:3', '9:16', '16:9'];
@@ -97,6 +98,10 @@ function cleanPat(p) {
   const num = (v, d) => { const n = Number(v); return n >= 1 && n <= 3 ? n : d; };
   return { type: THEME_TYPES.includes(p.type) ? p.type : 'solid', c1: col(p.c1, '#FFD3E4'), c2: col(p.c2, '#FFFFFF'), border: col(p.border, '#FFFFFF'), size: num(p.size, 2), line: num(p.line, 2) };
 }
+function publicTemplate(t) {
+  return { id: t.id, name: t.name, kind: t.kind, w: t.w, h: t.h, slots: t.slots, createdAt: t.createdAt, url: '/api/template-img?id=' + encodeURIComponent(t.id) };
+}
+
 function publicSticker(s) {
   return { id: s.id, label: s.label, cat: s.cat, createdAt: s.createdAt, url: '/api/sticker-img?id=' + encodeURIComponent(s.id) };
 }
@@ -308,6 +313,76 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ---- bingkai bawaan aplikasi yang dijadikan premium ----
+    if (req.method === 'GET' && action === 'builtin-get') {
+      const { settings } = await readSettings();
+      return res.status(200).json({ entries: settings.builtinPremium || {} });
+    }
+    if (req.method === 'POST' && action === 'builtin-save') {
+      const src = (req.body && req.body.entries) || {};
+      const entries = {};
+      Object.keys(src).slice(0, 200).forEach((id) => {
+        if (!/^[A-Za-z0-9:_-]{1,60}$/.test(id)) return;
+        const e = src[id] || {};
+        const priceIdr = Math.max(0, Math.min(5000000, Math.round(Number(String(e.priceIdr).replace(/[^\d]/g, '')) || 0)));
+        entries[id] = { priceIdr, label: String(e.label || id).slice(0, 60) };
+      });
+      const { settings, blobs } = await readSettings();
+      await writeDoc(SETTINGS_PREFIX, { gates: settings.gates, buyLink: settings.buyLink, shopName: settings.shopName, builtinPremium: entries }, blobs);
+      return res.status(200).json({ ok: true, count: Object.keys(entries).length });
+    }
+
+    // ---- template wallpaper / kolase ----
+    if (req.method === 'GET' && action === 'template-list') {
+      const { templates } = await readTemplates();
+      return res.status(200).json({ kinds: TEMPLATE_KINDS, templates: templates.slice().sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0)).map(publicTemplate) });
+    }
+    if (req.method === 'POST' && action === 'template-save') {
+      const b = req.body || {};
+      const kind = TEMPLATE_KINDS.includes(b.kind) ? b.kind : 'wallpaper';
+      const name = String(b.name || '').trim().slice(0, 40) || 'Template';
+      const m = /^data:(image\/(?:webp|png));base64,(.+)$/.exec(String(b.image || ''));
+      if (!m) return res.status(400).json({ error: 'Template harus PNG atau WebP' });
+      const buf = Buffer.from(m[2], 'base64');
+      if (!buf.length || buf.length > MAX_TEMPLATE_BYTES) return res.status(413).json({ error: 'Template terlalu besar (maks sekitar 2,4 MB). Perkecil ukurannya.' });
+      const w = Math.round(Number(b.w)), h = Math.round(Number(b.h));
+      if (!(w >= 200 && h >= 200 && w <= 6000 && h <= 6000)) return res.status(400).json({ error: 'Ukuran gambar tidak valid' });
+      const slots = (Array.isArray(b.slots) ? b.slots : []).slice(0, 12).map((s) => ({
+        x: Math.max(0, Math.min(1, Number(s.x))), y: Math.max(0, Math.min(1, Number(s.y))),
+        w: Math.max(0.02, Math.min(1, Number(s.w))), h: Math.max(0.02, Math.min(1, Number(s.h))),
+        rot: Math.max(-89, Math.min(89, Math.round((Number(s.rot) || 0) * 10) / 10)),
+      })).filter((s) => [s.x, s.y, s.w, s.h, s.rot].every(Number.isFinite));
+      if (!slots.length) return res.status(400).json({ error: 'Template belum punya lubang foto (bagian transparan atau warna polos)' });
+      const id = crypto.randomBytes(6).toString('hex');
+      const blob = await putAuto('snapin/templates/' + id + '.' + MIME[m[1]], buf, { contentType: m[1], addRandomSuffix: false });
+      const { templates, blobs } = await readTemplates();
+      if (templates.length >= 80) return res.status(400).json({ error: 'Maksimal 80 template' });
+      const rec = { id, name, kind, blobUrl: blob.url, contentType: m[1], w, h, slots, createdAt: Date.now() };
+      templates.push(rec);
+      await writeTemplates(templates, blobs);
+      return res.status(200).json({ ok: true, template: publicTemplate(rec) });
+    }
+    if (req.method === 'POST' && action === 'template-update') {
+      const b = req.body || {};
+      const { templates, blobs } = await readTemplates();
+      const t = templates.find((x) => x.id === String(b.id || ''));
+      if (!t) return res.status(404).json({ error: 'Template tidak ditemukan' });
+      if (b.name !== undefined) t.name = String(b.name || '').trim().slice(0, 40) || t.name;
+      if (b.kind !== undefined && TEMPLATE_KINDS.includes(b.kind)) t.kind = b.kind;
+      t.updatedAt = Date.now();
+      await writeTemplates(templates, blobs);
+      return res.status(200).json({ ok: true, template: publicTemplate(t) });
+    }
+    if (req.method === 'POST' && action === 'template-delete') {
+      const id = String((req.body && req.body.id) || '');
+      const { templates, blobs } = await readTemplates();
+      const t = templates.find((x) => x.id === id);
+      if (!t) return res.status(404).json({ error: 'Template tidak ditemukan' });
+      try { await deleteBlob(t.blobUrl); } catch (e) { /* abaikan */ }
+      await writeTemplates(templates.filter((x) => x.id !== id), blobs);
+      return res.status(200).json({ ok: true });
+    }
+
     // ---- tema buatan admin ----
     if (req.method === 'GET' && action === 'theme-list') {
       const { themes } = await readThemes();
@@ -412,7 +487,7 @@ export default async function handler(req, res) {
       const buyLink = normalizeBuyLink(b.buyLink);
       const shopName = String(b.shopName || 'Snapin').trim().slice(0, 40) || 'Snapin';
       const { blobs } = await readSettings();
-      await writeDoc(SETTINGS_PREFIX, { gates, buyLink, shopName }, blobs);
+      await writeDoc(SETTINGS_PREFIX, { gates, buyLink, shopName, builtinPremium: (await readSettings()).settings.builtinPremium }, blobs);
       return res.status(200).json({ ok: true, buyLink });
     }
     // Tes pembuatan QRIS (hanya admin): menampilkan jawaban PunyaKios yang sudah disamarkan, untuk mencari sebab QRIS gagal dibuat

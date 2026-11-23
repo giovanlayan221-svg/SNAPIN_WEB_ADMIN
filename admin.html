@@ -344,6 +344,30 @@
       <div id="list"><p class="muted">Memuat...</p></div>
     </section>
 
+    <section class="card" id="bp-card">
+      <h2>Bingkai bawaan premium</h2>
+      <p class="muted">Pilih bingkai bawaan aplikasi (yang dibuat dari kode) yang menjadi premium. Bingkai terpilih tampil dengan mahkota dan terkunci sampai pengguna membelinya (QRIS), memakai kode, atau membeli paket "Semua bingkai berbayar". Harga kosong atau 0 berarti hanya bisa dibuka lewat paket atau kode.</p>
+      <input id="bp-q" placeholder="Cari bingkai..." style="width:100%;box-sizing:border-box;padding:10px;border-radius:12px;border:1px solid var(--line);margin-bottom:8px">
+      <div id="bp-list" style="max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:6px"></div>
+      <div class="row"><button class="btn pink" id="bp-save" type="button">Simpan bingkai premium</button></div>
+      <div class="msg" id="bp-msg"></div>
+    </section>
+
+    <section class="card" id="tpl-card">
+      <h2>Template Wallpaper dan Kolase</h2>
+      <p class="muted">Unggah gambar template (PNG atau WebP) dari Canva. Bagian transparan atau warna polos (hijau, magenta, cyan, kuning) otomatis menjadi lubang foto. Pengguna memilih template di aplikasi, lalu bisa menambah stiker dan foto sendiri. Pilih jenisnya agar tampil di menu Wallpaper atau Kolase.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <select id="tpl-kind"><option value="wallpaper">Template Wallpaper</option><option value="kolase">Template Kolase</option></select>
+        <input id="tpl-name" maxlength="40" placeholder="Nama template" style="flex:1;min-width:160px">
+        <input type="file" id="tpl-file" accept="image/png,image/webp,image/*">
+      </div>
+      <canvas id="tpl-pv" style="max-width:240px;width:100%;display:none;margin-top:10px;border:1px solid var(--line);border-radius:12px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 50%/16px 16px"></canvas>
+      <div class="row"><button class="btn pink" id="tpl-save" type="button" hidden>Unggah template</button></div>
+      <div class="msg" id="tpl-msg"></div>
+      <h2 style="margin-top:18px;font-size:16px">Template tersimpan</h2>
+      <div id="tpl-list" class="stk-grid"><p class="muted">Memuat...</p></div>
+    </section>
+
     <section class="card" id="thm-card">
       <h2>Tema</h2>
       <p class="muted">Buat tema (pola kain, garis, kotak-kotak, titik, gradasi) yang muncul di aplikasi Snapin pada kategori "Tema saya" dan tersimpan di HP pengguna (jalan offline).</p>
@@ -1414,6 +1438,119 @@ function sbgRemove(src,o){
       }catch(err){ box.innerHTML='<p class="muted">Gagal memuat: '+escH(err.message)+'</p>'; }
     }
     fill(); refreshThemes();
+  })();
+
+
+  /* ---------- Template wallpaper / kolase ---------- */
+  (function(){
+    let cur = null; // hasil FrameDetect untuk berkas yang dipilih
+
+    async function detectSlots(dataURL){
+      const img = await loadImage(dataURL), k = Math.min(1, 700/Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth*k)), h = Math.max(1, Math.round(img.naturalHeight*k));
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(img,0,0,w,h);
+      const px = g.getImageData(0,0,w,h).data, mask = new Uint8Array(w*h), seen = new Uint8Array(w*h);
+      for (let i=0;i<w*h;i++) mask[i] = px[i*4+3] < 40 ? 1 : 0;
+      const out = [], minArea = Math.max(40, Math.round(w*h*0.004));
+      for (let s0=0; s0<w*h; s0++){
+        if (!mask[s0] || seen[s0]) continue;
+        const st = [s0]; seen[s0] = 1; const xs = [], ys = []; let touches = false;
+        while (st.length){
+          const p = st.pop(), x = p % w, y = (p - x) / w; xs.push(x); ys.push(y);
+          if (x===0 || y===0 || x===w-1 || y===h-1) touches = true;
+          if (x>0 && mask[p-1] && !seen[p-1]){ seen[p-1]=1; st.push(p-1); } if (x<w-1 && mask[p+1] && !seen[p+1]){ seen[p+1]=1; st.push(p+1); }
+          if (y>0 && mask[p-w] && !seen[p-w]){ seen[p-w]=1; st.push(p-w); } if (y<h-1 && mask[p+w] && !seen[p+w]){ seen[p+w]=1; st.push(p+w); }
+        }
+        if (touches || xs.length < minArea) continue;
+        const n = xs.length; let mx = 0, my = 0; for (let i=0;i<n;i++){ mx += xs[i]; my += ys[i]; } mx /= n; my /= n;
+        let cxx = 0, cyy = 0, cxy = 0; for (let i=0;i<n;i++){ const dx = xs[i]-mx, dy = ys[i]-my; cxx += dx*dx; cyy += dy*dy; cxy += dx*dy; }
+        let th = 0.5*Math.atan2(2*cxy, cxx-cyy), deg = th*180/Math.PI;
+        let umin = 1e9, umax = -1e9, vmin = 1e9, vmax = -1e9, ux = Math.cos(th), uy = Math.sin(th);
+        for (let i=0;i<n;i++){ const u = xs[i]*ux + ys[i]*uy, v = -xs[i]*uy + ys[i]*ux; if (u<umin) umin=u; if (u>umax) umax=u; if (v<vmin) vmin=v; if (v>vmax) vmax=v; }
+        let rw = umax-umin+1, rh = vmax-vmin+1; const cu = (umin+umax)/2, cv = (vmin+vmax)/2, cx = cu*ux - cv*uy, cy = cu*uy + cv*ux;
+        if (deg > 45){ deg -= 90; const t = rw; rw = rh; rh = t; } else if (deg < -45){ deg += 90; const t = rw; rw = rh; rh = t; }
+        if (Math.abs(deg) < 1.5){ let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (let i=0;i<n;i++){ if (xs[i]<x0) x0=xs[i]; if (xs[i]>x1) x1=xs[i]; if (ys[i]<y0) y0=ys[i]; if (ys[i]>y1) y1=ys[i]; } out.push({ cx:(x0+x1+1)/2/w, cy:(y0+y1+1)/2/h, w:(x1-x0+1)/w, h:(y1-y0+1)/h, rot:0 }); }
+        else out.push({ cx:(cx+0.5)/w, cy:(cy+0.5)/h, w:rw/w, h:rh/h, rot:Math.round(deg*10)/10 });
+      }
+      out.sort((a,b)=> Math.abs(a.cy-b.cy) > 0.05 ? a.cy-b.cy : a.cx-b.cx);
+      return out.slice(0,12).map(o=>({ x:o.cx-o.w/2, y:o.cy-o.h/2, w:o.w, h:o.h, rot:o.rot }));
+    }
+    const pv = $('#tpl-pv');
+    function drawPv(r){
+      return loadImage(r.dataURL).then(img=>{
+        const k = Math.min(1, 480/Math.max(r.width, r.height)); pv.width = Math.round(r.width*k); pv.height = Math.round(r.height*k); pv.style.display='block';
+        const x = pv.getContext('2d'); x.clearRect(0,0,pv.width,pv.height); x.drawImage(img,0,0,pv.width,pv.height);
+        x.lineWidth = 2; x.strokeStyle = '#ff2d7a'; x.fillStyle = 'rgba(255,45,122,.9)'; x.font = 'bold 14px sans-serif';
+        r.slots.forEach((s,i)=>{ const W = pv.width, H = pv.height, cx = (s.x+s.w/2)*W, cy = (s.y+s.h/2)*H; x.save(); x.translate(cx,cy); x.rotate(s.rot*Math.PI/180); x.strokeRect(-s.w*W/2,-s.h*H/2,s.w*W,s.h*H); x.fillText(String(i+1)+(s.rot?' ('+s.rot+'°)':''), -s.w*W/2+6, -s.h*H/2+18); x.restore(); });
+      });
+    }
+    $('#tpl-file').addEventListener('change', async e=>{
+      const f = e.target.files && e.target.files[0]; cur = null; $('#tpl-save').hidden = true; if (!f) return;
+      setMsg($('#tpl-msg'), 'Memproses...');
+      try{
+        const raw = await fileToDataURL(f);
+        const r = await FrameDetect.process(raw, 1800);
+        r.slots = await detectSlots(r.dataURL);
+        if (!r.slots.length){ pv.style.display='none'; return setMsg($('#tpl-msg'), 'Lubang foto tidak ditemukan. Pakai bagian transparan atau warna polos (hijau, magenta, cyan, kuning) untuk area foto.', 'err'); }
+        cur = r; await drawPv(r);
+        if (!$('#tpl-name').value) $('#tpl-name').value = f.name.replace(/\.[^.]+$/, '').slice(0, 40);
+        setMsg($('#tpl-msg'), r.slots.length + ' lubang foto terdeteksi' + (r.slots.some(s=>s.rot) ? ' (termasuk yang miring)' : '') + ', nomor 1, 2, 3 ... sesuai urutan baca. Isi nama lalu unggah.', 'ok'); $('#tpl-save').hidden = false;
+      }catch(err){ setMsg($('#tpl-msg'), 'Gambar tidak bisa dibaca', 'err'); }
+    });
+    $('#tpl-save').addEventListener('click', async ()=>{
+      if (!cur) return; const btn = $('#tpl-save'); btn.disabled = true;
+      try{
+        let u = cur.dataURL;
+        if (dataBytes(u) > 2400000){ const img = await loadImage(u); const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img,0,0); try{ const w = c.toDataURL('image/webp',0.88); if (w.indexOf('image/webp')>=0) u = w; }catch(e){} }
+        if (dataBytes(u) > 2400000){ const img = await loadImage(u); const k = 0.72; const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k); c.getContext('2d').drawImage(img,0,0,c.width,c.height); u = c.toDataURL('image/webp',0.85); }
+        const slots = cur.slots;
+        await api('template-save','POST',{ name:$('#tpl-name').value, kind:$('#tpl-kind').value, image:u, w:cur.width, h:cur.height, slots });
+        setMsg($('#tpl-msg'), 'Template terunggah. Muncul di aplikasi setelah pengguna terhubung ke server.', 'ok');
+        cur = null; $('#tpl-file').value=''; $('#tpl-name').value=''; pv.style.display='none'; btn.hidden = true; await refreshTemplates();
+      }catch(err){ setMsg($('#tpl-msg'), (err&&err.message)||'Gagal mengunggah', 'err'); }
+      btn.disabled = false;
+    });
+    async function refreshTemplates(){
+      const box = $('#tpl-list');
+      try{
+        const j = await api('template-list');
+        if (!j.templates.length){ box.innerHTML = '<p class="muted">Belum ada template dari admin.</p>'; return; }
+        box.innerHTML = '';
+        j.templates.forEach(t=>{
+          const d = document.createElement('div'); d.className = 'stk-cell';
+          d.innerHTML = '<div class="stk-prev" style="background:#eee"><img src="'+t.url+'" alt="" loading="lazy" style="max-height:150px"></div><b title="'+escH(t.name)+'">'+escH(t.name)+'</b><div class="muted" style="font-size:12px">'+(t.kind==='kolase'?'Kolase':'Wallpaper')+' - '+t.slots.length+' foto</div><div class="row"><button class="btn ghost t-k" type="button">Pindah jenis</button><button class="btn ghost t-ren" type="button">Nama</button><button class="btn ghost t-del" type="button">Hapus</button></div>';
+          d.querySelector('.t-k').addEventListener('click', async ()=>{ try{ await api('template-update','POST',{id:t.id,kind:t.kind==='kolase'?'wallpaper':'kolase'}); await refreshTemplates(); }catch(err){ toast(err.message); } });
+          d.querySelector('.t-ren').addEventListener('click', async ()=>{ const v = prompt('Nama template', t.name); if (v==null || !v.trim()) return; try{ await api('template-update','POST',{id:t.id,name:v.trim()}); await refreshTemplates(); }catch(err){ toast(err.message); } });
+          d.querySelector('.t-del').addEventListener('click', async ()=>{ if (!confirm('Hapus template "'+t.name+'"?')) return; try{ await api('template-delete','POST',{id:t.id}); await refreshTemplates(); }catch(err){ toast(err.message); } });
+          box.appendChild(d);
+        });
+      }catch(err){ box.innerHTML = '<p class="muted">Gagal memuat: '+escH(err.message)+'</p>'; }
+    }
+    refreshTemplates();
+  })();
+
+
+  /* ---------- Bingkai bawaan premium ---------- */
+  (function(){
+    const ALL = [["bunny", "Bunny Pink", "cute"], ["buddy", "Yellow Buddy", "cute"], ["y2k", "Y2K Chrome", "scrap"], ["sakura", "Sakura", "floral"], ["party", "Party Pop", "season"], ["film", "Retro Film", "vintage"], ["neon", "Neon Night", "masc"], ["cloud", "Dreamy Cloud", "cute"], ["ocean", "Summer Ocean", "season"], ["notebook", "Notebook", "scrap"], ["catpaw", "Cat Paws", "animal"], ["winter", "Winter Snow", "season"], ["heartpearl", "Hati Mutiara", "real"], ["dfr-gingham-red", "Gingham Merah", "real"], ["dfr-gingham-green", "Gingham Hijau", "real"], ["dfr-gingham-pink", "Gingham Pink", "real"], ["dfr-gingham-blue", "Gingham Biru", "real"], ["dfr-denim", "Denim Kantong", "real"], ["dfr-linen-cream", "Linen Krem", "real"], ["dfr-satin-rose", "Satin Mawar", "real"], ["dfr-dots-brown", "Polkadot Coklat", "real"], ["dfr-kraft", "Kertas Kraft", "real"], ["dfr-film-dark", "Film Hitam", "real"], ["dfr-pastel-grad", "Pastel Lembut", "real"], ["dfr-mint-stripes", "Garis Mint", "real"], ["dfr-lavender-satin", "Satin Lavender", "real"], ["dfr-sunset", "Senja", "real"], ["florareal", "Mawar & Mutiara", "real"], ["strawberry", "Strawberry Milk", "cute"], ["candy", "Candy Pop", "cute"], ["goldline", "Gold Line", "elegant"], ["marble", "Marble Gold", "elegant"], ["mono", "Mono Line", "minimal"], ["sage", "Sage Arch", "minimal"], ["carbon", "Carbon Sport", "masc"], ["racing", "Racing Flag", "masc"], ["daisy", "Daisy Garden", "floral"], ["tropical", "Tropical Leaf", "floral"], ["panda", "Panda Bamboo", "animal"], ["safari", "Safari Spots", "animal"], ["bestie", "Bestie Pop", "friend"], ["memories", "Memories", "friend"], ["autumn", "Autumn Leaves", "season"], ["ramadan", "Ramadan Night", "season"], ["christmas", "Christmas", "season"], ["birthday", "Birthday Party", "season"], ["scrap", "Kraft Scrap", "scrap"], ["collage", "Pop Collage", "scrap"], ["polaroid", "Polaroid Pastel", "vintage"], ["retro70", "Retro 70s", "vintage"]];
+    let entries = {};
+    function draw(){
+      const q = ($('#bp-q').value||'').toLowerCase(), box = $('#bp-list'); box.innerHTML = '';
+      ALL.filter(f=>!q || (f[1]+' '+f[0]+' '+f[2]).toLowerCase().includes(q)).forEach(f=>{
+        const e = entries[f[0]], row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line)';
+        row.innerHTML = '<label style="flex:1;display:flex;align-items:center;gap:8px"><input type="checkbox"'+(e?' checked':'')+'><span><b>'+escH(f[1])+'</b><br><small class="muted">'+escH(f[0])+(f[2]?' - '+escH(f[2]):'')+'</small></span></label><input type="text" inputmode="numeric" placeholder="Harga Rp" value="'+(e&&e.priceIdr?e.priceIdr:'')+'" style="width:110px;padding:8px;border-radius:10px;border:1px solid var(--line)"'+(e?'':' disabled')+'>';
+        const cb = row.querySelector('input[type=checkbox]'), pr = row.querySelector('input[type=text]');
+        cb.addEventListener('change', ()=>{ if (cb.checked) entries[f[0]] = { label:f[1], priceIdr:0 }; else delete entries[f[0]]; pr.disabled = !cb.checked; });
+        pr.addEventListener('input', ()=>{ if (entries[f[0]]) entries[f[0]].priceIdr = Number(pr.value.replace(/[^\d]/g,''))||0; });
+        box.appendChild(row);
+      });
+    }
+    $('#bp-q').addEventListener('input', draw);
+    $('#bp-save').addEventListener('click', async ()=>{
+      try{ const r = await api('builtin-save','POST',{ entries }); setMsg($('#bp-msg'), r.count+' bingkai bawaan premium tersimpan. Aplikasi menerapkannya saat tersambung ke server.', 'ok'); }
+      catch(err){ setMsg($('#bp-msg'), (err&&err.message)||'Gagal menyimpan', 'err'); }
+    });
+    api('builtin-get').then(j=>{ entries = j.entries || {}; draw(); }).catch(()=>draw());
   })();
 
   async function refreshStickers(){

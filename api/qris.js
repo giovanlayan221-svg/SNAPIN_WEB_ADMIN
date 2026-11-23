@@ -55,7 +55,9 @@ export default async function handler(req, res) {
         buyLink: settings.buyLink,
         gates: settings.gates,
         features: FEATURES,
-        frames: frames.filter((f) => f.isPremium && f.priceIdr >= MIN_IDR).map((f) => ({ id: f.id, label: f.label, priceIdr: f.priceIdr, price: rp(f.priceIdr) })),
+        frames: frames.filter((f) => f.isPremium && f.priceIdr >= MIN_IDR).map((f) => ({ id: f.id, label: f.label, priceIdr: f.priceIdr, price: rp(f.priceIdr) }))
+          .concat(Object.keys(settings.builtinPremium || {}).filter((id) => settings.builtinPremium[id].priceIdr >= MIN_IDR).map((id) => ({ id, label: settings.builtinPremium[id].label, priceIdr: settings.builtinPremium[id].priceIdr, price: rp(settings.builtinPremium[id].priceIdr) }))),
+        builtin: Object.keys(settings.builtinPremium || {}).map((id) => ({ id, label: settings.builtinPremium[id].label, priceIdr: settings.builtinPremium[id].priceIdr, price: settings.builtinPremium[id].priceIdr >= MIN_IDR ? rp(settings.builtinPremium[id].priceIdr) : '' })),
         packs: (data.packs || []).filter((p) => p.active !== false && p.priceIdr >= MIN_IDR).map(pubPack),
       });
     }
@@ -71,8 +73,11 @@ export default async function handler(req, res) {
       if (type === 'frame') {
         const { frames } = await readFrames();
         const f = frames.find((x) => x.id === id);
-        if (!f || !f.isPremium || !(f.priceIdr >= MIN_IDR)) return res.status(404).json({ error: 'Bingkai ini tidak dijual lewat QRIS' });
-        item = { label: f.label, base: f.priceIdr, grant: { ids: [f.id] } };
+        const { settings: st } = await readSettings();
+        const bp = (st.builtinPremium || {})[id];
+        if (f && f.isPremium && f.priceIdr >= MIN_IDR) item = { label: f.label, base: f.priceIdr, grant: { ids: [f.id] } };
+        else if (!f && bp && bp.priceIdr >= MIN_IDR) item = { label: bp.label, base: bp.priceIdr, grant: { ids: [id] } };
+        else return res.status(404).json({ error: 'Bingkai ini tidak dijual lewat QRIS' });
       } else {
         const { data } = await readDoc(PACKS_PREFIX, { packs: [] });
         const p = (data.packs || []).find((x) => x.id === id && x.active !== false);
